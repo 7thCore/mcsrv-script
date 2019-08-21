@@ -627,7 +627,7 @@ script_install_services() {
 		
 		[Service]
 		Type=oneshot
-		ExecStart=$SCRIPT_DIR/$SERVICE_NAME-update.bash
+		ExecStart=$SCRIPT_DIR/$SERVICE_NAME-update.bash -update
 		EOF
 		
 		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service <<- EOF
@@ -814,6 +814,7 @@ script_install() {
 	echo ""
 	echo "Required packages that need to be installed on the server:"
 	echo ""
+	echo "java"
 	echo "screen"
 	echo "postfix (optional/for the email feature)"
 	echo "zip (optional but required if using the email feature)"
