@@ -41,7 +41,7 @@ if [[ "$TMPFS_ENABLE" == "1" ]]; then
 	BCKP_SRC_DIR="$TMPFS_DIR/" #Application data of the tmpfs
 	JAR_FILE=$(ls -v $TMPFS_DIR | grep -i "forge-.*\.jar" | head -n 1)
 	SERVICE="$SERVICE_NAME-tmpfs.service" #TmpFs service file name
-elif [[ "$TMPFS_ENABLE" == "0" ]]; then
+else
 	BCKP_SRC_DIR="$SRV_DIR/" #Application data of the hdd/ssd
 	JAR_FILE=$(ls -v $SRV_DIR | grep -i "forge-.*\.jar" | head -n 1)
 	SERVICE="$SERVICE_NAME.service" #Hdd/ssd service file name
@@ -926,12 +926,10 @@ script_install() {
 	export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
 	EOF
 	
-	sudo chown $USER:users /home/$USER/.bash_profile
-	
 	echo "Installing service files"
 	script_install_services
 	
-	sudo chown -R $USER:users /home/$USER/.config/systemd/user
+	sudo chown -R $USER:users /home/$USER
 	
 	echo "Enabling services"
 		
