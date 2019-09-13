@@ -3,7 +3,7 @@
 #Interstellar Rift server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
 #Leave this variable alone, it is tied in with the systemd service file so it changes accordingly by it.
-export VERSION="201909101920"
+export VERSION="201909131315"
 
 #Basics
 export NAME="McSrv" #Name of the screen
@@ -477,6 +477,7 @@ script_install_services() {
 		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service <<- EOF
 		[Unit]
 		Description=Minecraft Server Service
+		Requires=$SERVICE_NAME-mkdir-tmpfs.service
 		After=network.target mnt-tmpfs.mount $SERVICE_NAME-mkdir-tmpfs.service
 		Conflicts=$SERVICE_NAME.service
 		StartLimitBurst=3
@@ -492,13 +493,13 @@ script_install_services() {
 		echo "ExecStart=/bin/bash -c 'screen -c "$SCRIPT_DIR/$SERVICE_NAME"-screen.conf -d -m -S "$NAME" java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$TMPFS_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service <<- EOF
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 10!"\\015'
-		ExecStop=/bin/sleep 5
+		ExecStop=/usr/bin/sleep 5
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 5!"\\015'
-		ExecStop=/bin/sleep 5
+		ExecStop=/usr/bin/sleep 5
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN NOW!"\\015'
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "save-all"\\015'
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "stop"\\015'
-		ExecStop=/bin/sleep 10
+		ExecStop=/usr/bin/sleep 10
 		ExecStop=/usr/bin/rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR
 		TimeoutStartSec=infinity
 		TimeoutStopSec=120
@@ -526,13 +527,13 @@ script_install_services() {
 		echo "ExecStart=/bin/bash -c 'screen -c "$SCRIPT_DIR/$SERVICE_NAME"-screen.conf -d -m -S "$NAME" java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$SRV_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service <<- EOF
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 10!"\\015'
-		ExecStop=/bin/sleep 5
+		ExecStop=/usr/bin/sleep 5
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 5!"\\015'
-		ExecStop=/bin/sleep 5
+		ExecStop=/usr/bin/sleep 5
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN NOW!"\\015'
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "save-all"\\015'
 		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "stop"\\015'
-		ExecStop=/bin/sleep 10
+		ExecStop=/usr/bin/sleep 10
 		TimeoutStartSec=infinity
 		TimeoutStopSec=120
 		RestartSec=10
