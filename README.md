@@ -69,6 +69,12 @@ Copy your game files to the server folder in the created user's home folder.
 
 After the installation finishes you can reboot the operating system and the service files will start the game server automaticly on boot.
 
+You can also install bash aliases to make your life easier with the following command:
+
+./mcsrv-script.bash -install_aliases
+
+After that relog.
+
 Any other script commands are available with:
 
 ./mcsrv-script.bash -help
