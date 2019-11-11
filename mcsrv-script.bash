@@ -2,7 +2,7 @@
 
 #Interstellar Rift server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="201911041228"
+export VERSION="201911112020"
 
 #Basics
 export NAME="McSrv" #Name of the screen
@@ -61,7 +61,7 @@ BCKP_DEST="$BCKP_DIR/$(date +"%Y")/$(date +"%m")/$(date +"%d")" #How backups are
 #Log configuration
 export LOG_DIR="/home/$USER/logs/$(date +"%Y")/$(date +"%m")/$(date +"%d")"
 export LOG_SCRIPT="$LOG_DIR/$SERVICE_NAME-script.log" #Script log
-export LOG_TMP="/tmp/$SERVICE_NAME-screen.log"
+export LOG_TMP="/tmp/$USER-$SERVICE_NAME-tmux.log"
 
 TIMEOUT=120
 
@@ -148,12 +148,12 @@ script_saveon() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Server is in deactivating. Aborting save." | tee -a "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save on) Activating autosaving." | tee -a  "$LOG_SCRIPT"
-		( sleep 5 && screen -p 0 -S $NAME -X eval 'stuff "save-on"\\015' ) &
+		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-on" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
 			if [[ "$line" =~ "[Server thread/INFO] [minecraft/DedicatedServer]: Turned on world auto-saving" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save on) Autosaving has been Activated." | tee -a  "$LOG_SCRIPT"
-				screen -p 0 -S $NAME -X eval 'stuff "say Automatic world saving is enabled."\\015'
+				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Automatic world saving is enabled." ENTER
 				break
 			else
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save on) Activating autosaving. Please wait..."
@@ -174,12 +174,12 @@ script_saveoff() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Server is in deactivating. Aborting save." | tee -a "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save off) Deactivating autosaving." | tee -a  "$LOG_SCRIPT"
-		( sleep 5 && screen -p 0 -S $NAME -X eval 'stuff "save-off"\\015' ) &
+		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-off" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
 			if [[ "$line" =~ "[Server thread/INFO] [minecraft/DedicatedServer]: Turned off world auto-saving" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save off) Autosaving has been deactivated." | tee -a  "$LOG_SCRIPT"
-				screen -p 0 -S $NAME -X eval 'stuff "say Automatic world saving is disabled."\\015'
+				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Automatic world saving is disabled." ENTER
 				break
 			else
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save off) Deactivating autosaving. Please wait..."
@@ -200,12 +200,12 @@ script_save() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Server is in deactivating. Aborting save." | tee -a "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Save game to disk has been initiated." | tee -a  "$LOG_SCRIPT"
-		( sleep 5 && screen -p 0 -S $NAME -X eval 'stuff "save-all"\\015' ) &
+		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-all" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
 			if [[ "$line" =~ "[Server thread/INFO] [minecraft/DedicatedServer]: Saved the world" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Save game to disk has been completed." | tee -a  "$LOG_SCRIPT"
-				screen -p 0 -S $NAME -X eval 'stuff "say World save complete."\\015'
+				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say World save complete." ENTER
 				break
 			else
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Save game to disk is in progress. Please wait..."
@@ -227,32 +227,32 @@ script_cleardrops() {
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Clear drops) Clearing drops in 1 minute." | tee -a  "$LOG_SCRIPT"
 		( sleep 5 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 1 minutes!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 1 minutes!" ENTER &&
 		sleep 30 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 30 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 30 seconds!" ENTER &&
 		sleep 15 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 15 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 15 seconds!" ENTER &&
 		sleep 5 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 10 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 10 seconds!" ENTER &&
 		sleep 5 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 5 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 5 seconds!" ENTER &&
 		sleep 1 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 4 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 4 seconds!" ENTER &&
 		sleep 1 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 3 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 3 seconds!" ENTER &&
 		sleep 1 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 2 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 2 seconds!" ENTER &&
 		sleep 1 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Warning! Clearing all drops in 1 seconds!"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Warning! Clearing all drops in 1 seconds!" ENTER &&
 		sleep 1 &&
-		screen -p 0 -S $NAME -X eval 'stuff "say Clearing drops."\015' &&
-		screen -p 0 -S $NAME -X eval 'stuff "/kill @e[type=item]"\015' &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Clearing drops." ENTER &&
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "/kill @e[type=item]" ENTER &&
 		sleep 1 ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
 			if [[ "$line" =~ "/kill @e[type=item]" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Clear Drops) Clearing drops complete." | tee -a  "$LOG_SCRIPT"
-				screen -p 0 -S $NAME -X eval 'stuff "say Clearing drops complete."\015'
+				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Clearing drops complete." ENTER
 				break
 			else
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Clear Drops) Clearing drops in progress. Please wait..."
@@ -277,7 +277,7 @@ script_sync() {
 			rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR #| sed -e "s/^/$(date +"%Y-%m-%d %H:%M:%S") [$NAME] [INFO] (Sync) Syncing: /" | tee -a  "$LOG_SCRIPT"
 			sleep 1
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Sync) Sync from tmpfs to disk has been completed." | tee -a  "$LOG_SCRIPT"
-			screen -p 0 -S $NAME -X eval 'stuff "say File sync complete."\\015'
+			/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say File sync complete." ENTER
 		fi
 	elif [[ "$TMPFS_ENABLE" == "0" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Sync) Server does not have tmpfs enabled." | tee -a  "$LOG_SCRIPT"
@@ -338,7 +338,7 @@ script_restart() {
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Restart) Server is going to restart in 15-30 seconds, please wait..." | tee -a "$LOG_SCRIPT"
 		sleep 1
-		screen -p 0 -S $NAME -X eval 'stuff "/say Server restarting in 15 seconds."\\015'
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Server restarting in 15 seconds." ENTER
 		sleep 15
 		script_stop
 		sleep 1
@@ -376,12 +376,12 @@ script_autobackup() {
 	if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" != "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Autobackup) Server is not running." | tee -a  "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
-		screen -p 0 -S $NAME -X eval 'stuff "/say Server backup in progress."\\015'
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Server backup in progress." ENTER
 		sleep 1
 		script_backup
 		sleep 1
 		script_deloldbackup
-		screen -p 0 -S $NAME -X eval 'stuff "/say Server backup complete."\\015'
+		/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Server backup complete." ENTER
 
 	fi
 }
@@ -412,6 +412,153 @@ script_delete_save() {
 		fi
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Clear save) The server is running. Aborting..." | tee -a "$LOG_SCRIPT"
+	fi
+}
+
+#Install aliases in .bashrc
+script_install_alias(){
+	if [ "$EUID" -ne "0" ]; then #Check if script executed as root and asign the username for the installation process, otherwise use the executing user
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Install .bashrc aliases) Installation of aliases in .bashrc commencing. Waiting on user configuration." | tee -a "$LOG_SCRIPT"
+		read -p "Are you sure you want to reinstall the tmux configuration? (y/n): " INSTALL_BASHRC_ALIAS
+		if [[ "$INSTALL_BASHRC_ALIAS" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+			INSTALL_BASHRC_ALIAS_STATE="1"
+		elif [[ "$INSTALL_BASHRC_ALIAS" =~ ^([nN][oO]|[nN])$ ]]; then
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Install .bashrc aliases) Installation of aliases in .bashrc aborted." | tee -a "$LOG_SCRIPT"
+			INSTALL_BASHRC_ALIAS_STATE="0"
+		fi
+	else
+		INSTALL_BASHRC_ALIAS_STATE="1"
+	fi
+	
+	if [[ "$INSTALL_BASHRC_ALIAS_STATE" == "1" ]]; then
+		cat >> /home/$USER/.bashrc <<- EOF
+			alias $SERVICE_NAME-server='tmux -L $USER-tmux.sock attach -t $NAME'
+			alias $SERVICE_NAME-serversync='tmux -L $USER-serversync-tmux.sock attach -t ServerSync'
+		EOF
+	fi
+	
+	if [ "$EUID" -ne "0" ]; then
+		if [[ "$INSTALL_BASHRC_ALIAS_STATE" == "1" ]]; then
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Install .bashrc aliases) Installation of aliases in .bashrc complete. Re-log for the changes to take effect." | tee -a "$LOG_SCRIPT"
+			echo "Aliases:"
+			echo "$SERVICE_NAME-server = Attaches to the server console."
+			echo "$SERVICE_NAME-serversync = Attaches to the ServerSync console."
+		fi
+	fi
+}
+
+#Install or reinstall tmux configuration
+script_install_tmux_config() {
+	if [ "$EUID" -ne "0" ]; then #Check if script executed as root and asign the username for the installation process, otherwise use the executing user
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation commencing. Waiting on user configuration." | tee -a "$LOG_SCRIPT"
+		read -p "Are you sure you want to reinstall the tmux configuration? (y/n): " REINSTALL_TMUX_CONFIG
+		if [[ "$REINSTALL_TMUX_CONFIG" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+			INSTALL_TMUX_CONFIG_STATE="1"
+		elif [[ "$REINSTALL_TMUX_CONFIG" =~ ^([nN][oO]|[nN])$ ]]; then
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation aborted." | tee -a "$LOG_SCRIPT"
+			INSTALL_TMUX_CONFIG_STATE="0"
+		fi
+	else
+		INSTALL_TMUX_CONFIG_STATE="1"
+	fi
+	
+	if [[ "$INSTALL_TMUX_CONFIG_STATE" == "1" ]]; then
+		if [ -f "$SCRIPT_DIR/$SERVICE_NAME-tmux.conf" ]; then
+			rm $SCRIPT_DIR/$SERVICE_NAME-tmux.conf
+		fi
+		
+		cat > $SCRIPT_DIR/$SERVICE_NAME-tmux.conf <<- EOF
+		#Tmux configuration
+		set -g activity-action other
+		set -g allow-rename off
+		set -g assume-paste-time 1
+		set -g base-index 0
+		set -g bell-action any
+		set -g default-command "${SHELL}"
+		set -g default-terminal "tmux-256color" 
+		set -g default-shell "/bin/bash"
+		set -g default-size "132x42"
+		set -g destroy-unattached off
+		set -g detach-on-destroy on
+		set -g display-panes-active-colour red
+		set -g display-panes-colour blue
+		set -g display-panes-time 1000
+		set -g display-time 3000
+		set -g history-limit 10000
+		set -g key-table "root"
+		set -g lock-after-time 0
+		set -g lock-command "lock -np"
+		set -g message-command-style fg=yellow,bg=black
+		set -g message-style fg=black,bg=yellow
+		set -g mouse on
+		#set -g prefix C-b
+		set -g prefix2 None
+		set -g renumber-windows off
+		set -g repeat-time 500
+		set -g set-titles off
+		set -g set-titles-string "#S:#I:#W - \"#T\" #{session_alerts}"
+		set -g silence-action other
+		set -g status on
+		set -g status-bg green
+		set -g status-fg black
+		set -g status-format[0] "#[align=left range=left #{status-left-style}]#{T;=/#{status-left-length}:status-left}#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{window-status-last-style},default}}, #{window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{window-status-bell-style},default}}, #{window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{window-status-activity-style},default}}, #{window-status-activity-style},}}]#{T:window-status-format}#[norange default]#{?window_end_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{window-status-current-style},default},#{window-status-current-style},#{window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{window-status-last-style},default}}, #{window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{window-status-bell-style},default}}, #{window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{window-status-activity-style},default}}, #{window-status-activity-style},}}]#{T:window-status-current-format}#[norange list=on default]#{?window_end_flag,,#{window-status-separator}}}#[nolist align=right range=right #{status-right-style}]#{T;=/#{status-right-length}:status-right}#[norange default]"
+		set -g status-format[1] "#[align=centre]#{P:#{?pane_active,#[reverse],}#{pane_index}[#{pane_width}x#{pane_height}]#[default] }"
+		set -g status-interval 15
+		set -g status-justify left
+		set -g status-keys emacs
+		set -g status-left "[#S] "
+		set -g status-left-length 10
+		set -g status-left-style default
+		set -g status-position bottom
+		set -g status-right "#{?window_bigger,[#{window_offset_x}#,#{window_offset_y}] ,}\"#{=21:pane_title}\" %H:%M %d-%b-%y"
+		set -g status-right-length 40
+		set -g status-right-style default
+		set -g status-style fg=black,bg=green
+		set -g update-environment[0] "DISPLAY"
+		set -g update-environment[1] "KRB5CCNAME"
+		set -g update-environment[2] "SSH_ASKPASS"
+		set -g update-environment[3] "SSH_AUTH_SOCK"
+		set -g update-environment[4] "SSH_AGENT_PID"
+		set -g update-environment[5] "SSH_CONNECTION"
+		set -g update-environment[6] "WINDOWID"
+		set -g update-environment[7] "XAUTHORITY"
+		set -g visual-activity off
+		set -g visual-bell off
+		set -g visual-silence off
+		set -g word-separators " -_@"
+
+		#Change prefix key from ctrl+b to ctrl+a
+		unbind C-b
+		set -g prefix C-a
+		bind C-a send-prefix
+
+		#Bind C-a r to reload the config file
+		bind-key r source-file $SCRIPT_DIR/$SERVICE_NAME-tmux.conf \; display-message "Config reloaded!"
+
+		set-hook -g session-created 'resize-window -y 24 -x 10000'
+		set-hook -g session-created "pipe-pane -o 'tee >> $LOG_TMP'"
+		set-hook -g client-attached 'resize-window -y 24 -x 10000'
+		set-hook -g client-detached 'resize-window -y 24 -x 10000'
+		set-hook -g client-resized 'resize-window -y 24 -x 10000'
+
+		#Default key bindings (only here for info)
+		#Ctrl-b l (Move to the previously selected window)
+		#Ctrl-b w (List all windows / window numbers)
+		#Ctrl-b <window number> (Move to the specified window number, the default bindings are from 0 – 9)
+		#Ctrl-b q  (Show pane numbers, when the numbers show up type the key to goto that pane)
+
+		#Ctrl-b f <window name> (Search for window name)
+		#Ctrl-b w (Select from interactive list of windows)
+
+		#Copy/ scroll mode
+		#Ctrl-b [ (in copy mode you can navigate the buffer including scrolling the history. Use vi or emacs-style key bindings in copy mode. The default is emacs. To exit copy mode use one of the following keybindings: vi q emacs Esc)
+		EOF
+	fi
+	
+	if [ "$EUID" -ne "0" ]; then
+		if [[ "$INSTALL_TMUX_CONFIG_STATE" == "1" ]]; then
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation complete. Restart your server for changes to take affect." | tee -a "$LOG_SCRIPT"
+		fi
 	fi
 }
 
@@ -493,15 +640,15 @@ script_install_services() {
 		WorkingDirectory=$TMPFS_DIR
 		ExecStartPre=/usr/bin/rsync -av --info=progress2 $SRV_DIR/ $TMPFS_DIR
 		EOF
-		echo "ExecStart=/bin/bash -c 'screen -c "$SCRIPT_DIR/$SERVICE_NAME"-screen.conf -d -m -S "$NAME" java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$TMPFS_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service
+		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$TMPFS_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service <<- EOF
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 10!"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
 		ExecStop=/usr/bin/sleep 5
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 5!"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
 		ExecStop=/usr/bin/sleep 5
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN NOW!"\\015'
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "save-all"\\015'
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "stop"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
 		ExecStop=/usr/bin/sleep 10
 		ExecStop=/usr/bin/rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR
 		TimeoutStartSec=infinity
@@ -527,15 +674,15 @@ script_install_services() {
 		Type=forking
 		WorkingDirectory=$SRV_DIR
 		EOF
-		echo "ExecStart=/bin/bash -c 'screen -c "$SCRIPT_DIR/$SERVICE_NAME"-screen.conf -d -m -S "$NAME" java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$SRV_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service
+		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$SRV_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service <<- EOF
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 10!"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
 		ExecStop=/usr/bin/sleep 5
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN IN 5!"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
 		ExecStop=/usr/bin/sleep 5
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "say SERVER SHUTTING DOWN NOW!"\\015'
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "save-all"\\015'
-		ExecStop=/usr/bin/screen -p 0 -S $NAME -X eval 'stuff "stop"\\015'
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
 		ExecStop=/usr/bin/sleep 10
 		TimeoutStartSec=infinity
 		TimeoutStopSec=120
@@ -643,9 +790,9 @@ script_install_services() {
 		Type=forking
 		WorkingDirectory=$SERVER_SYNC
 		EOF
-		echo "ExecStart=/bin/bash -c 'screen -d -m -S ServerSync java -jar "'$(ls -v '$SERVER_SYNC' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
+		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-serversync-tmux.sock new-session -d -s ServerSync 'java -jar "'$(ls -v '$SERVER_SYNC' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service <<- EOF
-		ExecStop=/usr/bin/screen -X -S ServerSync quit
+		ExecStop=/usr/bin/tmux -L %u-serversync-tmux.sock kill-session -t ServerSync
 
 		Restart=on-failure
 		RestartSec=60
@@ -813,13 +960,49 @@ script_timer_two() {
 	fi
 }
 
+script_install_packages() {
+	if [ -f "/etc/os-release" ]; then
+		#Get distro name
+		DISTRO=$(cat /etc/os-release | grep "^ID" | cut -d = -f2)
+		
+		#Check for current distro
+		if [[ "$DISTRO" == "arch" ]]; then
+			#Arch distro
+			
+			#Add arch linux multilib repository
+			echo "[multilib]" >> /mnt/etc/pacman.conf
+			echo "Include = /etc/pacman.d/mirrorlist" >> /mnt/etc/pacman.conf
+			
+			#Install packages and enable services
+			sudo pacman -Syu --noconfirm rsync unzip p7zip wget curl tmux postfix zip jre8-openjdk
+		elif [[ "$DISTRO" == "ubuntu" ]]; then
+			#Ubuntu distro
+			
+			#Get codename
+			UBUNTU_CODENAME=$(cat /etc/os-release | grep "^UBUNTU_CODENAME" | cut -d = -f2)
+			
+			#Install packages and enable services
+			sudo apt install --install-recommends winehq-staging
+			sudo apt install --install-recommends steamcmd
+			sudo apt install rsync unzip p7zip wget curl tmux zip postfix
+		fi
+		echo "Package installation complete."
+	else
+		echo "os-release file not found. Is this distro supported?"
+		echo "This script currently supports Arch Linux and Ubuntu 19.10"
+		exit 1
+	fi
+
+}
+
 script_install() {
 	echo "Installation"
 	echo ""
 	echo "Required packages that need to be installed on the server:"
 	echo ""
 	echo "java"
-	echo "screen"
+	echo "rsync"
+	echo "tmux"
 	echo "postfix (optional/for the email feature)"
 	echo "zip (optional but required if using the email feature)"
 	echo ""
@@ -864,7 +1047,7 @@ script_install() {
 			cat >> /etc/fstab <<- EOF
 			
 			# /mnt/tmpfs
-			tmpfs				   /mnt/tmpfs		tmpfs		   rw,size=$TMPFS_SIZE,gid=users,mode=0777	0 0
+			tmpfs				   /mnt/tmpfs		tmpfs		   rw,size=$TMPFS_SIZE,gid=$(cat /etc/group | grep users | grep -o '[[:digit:]]*'),mode=0777	0 0
 			EOF
 		fi
 	fi
@@ -958,107 +1141,8 @@ script_install() {
 	cp "$(readlink -f $0)" $SCRIPT_DIR
 	chmod +x $SCRIPT_DIR/$SCRIPT_NAME
 	
-	echo "Installing screen configuration for server console and logs"
-	cat > $SCRIPT_DIR/$SERVICE_NAME-screen.conf <<- EOF
-	#
-	# This is an example for the global screenrc file.
-	# You may want to install this file as /usr/local/etc/screenrc.
-	# Check config.h for the exact location.
-	#
-	# Flaws of termcap and standard settings are done here.
-	#
-	
-	#startup_message off
-	
-	#defflow on # will force screen to process ^S/^Q
-	
-	deflogin on
-	#autodetach off
-	
-	vbell on
-	vbell_msg "   Wuff  ----  Wuff!!  "
-	
-	# all termcap entries are now duplicated as terminfo entries.
-	# only difference should be the slightly modified syntax, and check for
-	# terminfo entries, that are already corected in the database.
-	# 
-	# G0 	we have a SEMI-GRAPHICS-CHARACTER-MODE
-	# WS	this sequence resizes our window.
-	# cs    this sequence changes the scrollregion
-	# hs@	we have no hardware statusline. screen will only believe that
-	#       there is a hardware status line if hs,ts,fs,ds are all set.
-	# ts    to statusline
-	# fs    from statusline
-	# ds    delete statusline
-	# al    add one line
-	# AL    add multiple lines
-	# dl    delete one line
-	# DL    delete multiple lines
-	# ic    insert one char (space)
-	# IC    insert multiple chars
-	# nx    terminal uses xon/xoff
-	
-	termcap  facit|vt100|xterm LP:G0
-	terminfo facit|vt100|xterm LP:G0
-	
-	#the vt100 description does not mention "dl". *sigh*
-	termcap  vt100 dl=5\E[M
-	terminfo vt100 dl=5\E[M
-	
-	#facit's "al" / "dl"  are buggy if the current / last line
-	#contain attributes...
-	termcap  facit al=\E[L\E[K:AL@:dl@:DL@:cs=\E[%i%d;%dr:ic@
-	terminfo facit al=\E[L\E[K:AL@:dl@:DL@:cs=\E[%i%p1%d;%p2%dr:ic@
-	
-	#make sun termcap/info better
-	termcap  sun 'up=^K:AL=\E[%dL:DL=\E[%dM:UP=\E[%dA:DO=\E[%dB:LE=\E[%dD:RI=\E[%dC:IC=\E[%d@:WS=1000\E[8;%d;%dt'
-	terminfo sun 'up=^K:AL=\E[%p1%dL:DL=\E[%p1%dM:UP=\E[%p1%dA:DO=\E[%p1%dB:LE=\E[%p1%dD:RI=\E[%p1%dC:IC=\E[%p1%d@:WS=\E[8;%p1%d;%p2%dt$<1000>'
-	
-	#xterm understands both im/ic and doesn't have a status line.
-	#Note: Do not specify im and ic in the real termcap/info file as
-	#some programs (e.g. vi) will (no,no, may (jw)) not work anymore.
-	termcap  xterm|fptwist hs@:cs=\E[%i%d;%dr:im=\E[4h:ei=\E[4l
-	terminfo xterm|fptwist hs@:cs=\E[%i%p1%d;%p2%dr:im=\E[4h:ei=\E[4l
-	
-	# Long time I had this in my private screenrc file. But many people
-	# seem to want it (jw):
-	# we do not want the width to change to 80 characters on startup:
-	# on suns, /etc/termcap has :is=\E[r\E[m\E[2J\E[H\E[?7h\E[?1;3;4;6l:
-	termcap xterm 'is=\E[r\E[m\E[2J\E[H\E[?7h\E[?1;4;6l'
-	terminfo xterm 'is=\E[r\E[m\E[2J\E[H\E[?7h\E[?1;4;6l'
-	
-	#
-	# Do not use xterms alternate window buffer. 
-	# This one would not add lines to the scrollback buffer.
-	termcap xterm|xterms|xs ti=\E7\E[?47l
-	terminfo xterm|xterms|xs ti=\E7\E[?47l
-	
-	#make hp700 termcap/info better
-	termcap  hp700 'Z0=\E[?3h:Z1=\E[?3l:hs:ts=\E[62"p\E[0$~\E[2$~\E[1$}:fs=\E[0}\E[61"p:ds=\E[62"p\E[1$~\E[61"p:ic@'
-	terminfo hp700 'Z0=\E[?3h:Z1=\E[?3l:hs:ts=\E[62"p\E[0$~\E[2$~\E[1$}:fs=\E[0}\E[61"p:ds=\E[62"p\E[1$~\E[61"p:ic@'
-	
-	#wyse-75-42 must have defflow control (xo = "terminal uses xon/xoff")
-	#(nowadays: nx = padding doesn't work, have to use xon/off)
-	#essential to have it here, as this is a slow terminal.
-	termcap wy75-42 nx:xo:Z0=\E[?3h\E[31h:Z1=\E[?3l\E[31h
-	terminfo wy75-42 nx:xo:Z0=\E[?3h\E[31h:Z1=\E[?3l\E[31h
-	
-	#remove some stupid / dangerous key bindings
-	bind ^k
-	#bind L
-	bind ^\
-	#make them better
-	bind \\ quit
-	bind K kill
-	bind I login on
-	bind O login off
-	bind } history
-	
-	scrollback 1000
-	logfile $LOG_TMP
-	logfile flush 0
-	deflog on
-	EOF
+	echo "Installing tmux configuration for server console and logs"
+	script_install_tmux_config
 	
 	echo "Installing update script"
 	script_install_update_script
@@ -1106,6 +1190,8 @@ case "$1" in
 		echo -e "${GREEN}backup ${RED}- ${GREEN}Backup files, if server running or not.${NC}"
 		echo -e "${GREEN}autobackup ${RED}- ${GREEN}Automaticly backup files when server running${NC}"
 		echo -e "${GREEN}deloldbackup ${RED}- ${GREEN}Delete old backups${NC}"
+		echo -e "${GREEN}install_aliases ${RED}- ${GREEN}Installs .bashrc aliases for easy access to the server tmux session.${NC}"
+		echo -e "${GREEN}rebuild_tmux_config ${RED}- ${GREEN}Reinstalls the tmux configuration file from the script. Usefull if any tmux configuration updates occoured.${NC}"
 		echo -e "${GREEN}rebuild_services ${RED}- ${GREEN}Reinstalls the systemd services from the script. Usefull if any service updates occoured.${NC}"
 		echo -e "${GREEN}rebuild_update_script ${RED}- ${GREEN}Reinstalls the update script that keeps the primary script up-to-date from github.${NC}"
 		echo -e "${GREEN}update ${RED}- ${GREEN}Update the server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
@@ -1159,6 +1245,12 @@ case "$1" in
 	-send_crash_email)
 		script_send_crash_email
 		;;
+	-install_aliases)
+		script_install_alias
+		;;
+	-rebuild_tmux_config)
+		script_install_tmux_config
+		;;
 	-install)
 		script_install
 		;;
@@ -1175,7 +1267,7 @@ case "$1" in
 		script_timer_two
 		;;
 	*)
-	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|rebuild_services|rebuild_update_script|update|status|install}"
+	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|rebuild_update_script|update|status|install}"
 	exit 1
 	;;
 esac
