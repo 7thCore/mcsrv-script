@@ -45,11 +45,11 @@ Bash script for running Minecraft on a linux server
 
 Log in to your server with ssh and execute:
 
-git clone https://github.com/7thCore/mcsrv-script
+```git clone https://github.com/7thCore/mcsrv-script```
 
 Make it executable:
 
-chmod +x ./mcsrv-script.bash
+```chmod +x ./mcsrv-script.bash```
 
 If you plan on using a ramdisk to run your server from, the script will give you that option.
 
@@ -57,11 +57,11 @@ Now for the installation.
 
 If you wish you can have the script install the required packages with (Only for Arch Linux & Ubuntu 19.10):
 
-sudo ./mcsrv-script.bash -install_packages
+```sudo ./mcsrv-script.bash -install_packages```
 
 After that run the script with root permitions like so (necessary for user creation):
 
-sudo ./mcsrv-script.bash -install
+```sudo ./mcsrv-script.bash -install```
 
 The script will create a new non-sudo enabled user from wich the game server will run. If you want to have multiple game servers on the same machine just run the script multiple times but with a diffrent username inputted to the script.
 
@@ -71,13 +71,13 @@ After the installation finishes you can reboot the operating system and the serv
 
 You can also install bash aliases to make your life easier with the following command:
 
-./mcsrv-script.bash -install_aliases
+```./mcsrv-script.bash -install_aliases```
 
 After that relog.
 
 Any other script commands are available with:
 
-./mcsrv-script.bash -help
+```./mcsrv-script.bash -help```
 
 That should be it.
 
