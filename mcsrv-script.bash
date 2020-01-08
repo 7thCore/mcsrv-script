@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202001081855"
+export VERSION="202001082337"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -1134,7 +1134,7 @@ script_timer_two() {
 script_install_packages() {
 	if [ -f "/etc/os-release" ]; then
 		#Get distro name
-		DISTRO=$(cat /etc/os-release | grep "^ID" | cut -d = -f2)
+		DISTRO=$(cat /etc/os-release | grep "^ID=" | cut -d = -f2)
 		
 		#Check for current distro
 		if [[ "$DISTRO" == "arch" ]]; then
@@ -1150,7 +1150,7 @@ script_install_packages() {
 			#Ubuntu distro
 			
 			#Get codename
-			UBUNTU_CODENAME=$(cat /etc/os-release | grep "^UBUNTU_CODENAME" | cut -d = -f2)
+			UBUNTU_CODENAME=$(cat /etc/os-release | grep "^UBUNTU_CODENAME=" | cut -d = -f2)
 			
 			#Install packages and enable services
 			sudo apt install --install-recommends steamcmd
