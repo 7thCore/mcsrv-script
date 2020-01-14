@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202001131706"
+export VERSION="202001141650"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -19,7 +19,7 @@ SERVICE_NAME="mcsrv" #Name of the service files, script and script log
 SRV_DIR="/home/$USER/server" #Location of the server located on your hdd/ssd
 SCRIPT_NAME="$SERVICE_NAME-script.bash" #Script name
 SCRIPT_DIR="/home/$USER/scripts" #Location of this script
-SERVER_SYNC="/home/$USER/serversync"
+SERVER_SYNC_DIR="/home/$USER/serversync"
 
 if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
 	#Email configuration
@@ -45,6 +45,9 @@ if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
 
 	#Script updates from github
 	SCRIPT_UPDATES_GITHUB=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep script_updates | cut -d = -f2) #Get configuration for script updates.
+	
+	#ServerSync
+	SERVER_SYNC=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep serversync | cut -d = -f2) #Get configuration for script updates.
 else
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Configuration) The configuration is missing. Did you execute script installation?"
 fi
@@ -141,8 +144,8 @@ script_disable_services() {
 	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-timer-2.timer)" == "enabled" ]]; then
 		systemctl --user disable $SERVICE_NAME-timer-2.timer
 	fi
-	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-timer-3.timer)" == "enabled" ]]; then
-		systemctl --user disable $SERVICE_NAME-timer-3.timer
+	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-serversync.service)" == "enabled" ]]; then
+		systemctl --user disable $SERVICE_NAME-timer-2.timer
 	fi
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Disable services) Services successfully disabled." | tee -a "$LOG_SCRIPT"
 }
@@ -178,9 +181,9 @@ script_enable_services() {
 	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-timer-2.timer)" == "disabled" ]]; then
 		systemctl --user enable $SERVICE_NAME-timer-2.timer
 	fi
-	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-timer-3.timer)" == "disabled" ]]; then
-		if [[ "$SCRIPT_UPDATES_GITHUB" == "1" ]]; then
-			systemctl --user enable $SERVICE_NAME-timer-3.timer
+	if [[ "$(systemctl --user show -p UnitFileState --value $SERVICE_NAME-serversync.service)" == "disabled" ]]; then
+		if [[ "$SERVER_SYNC" == "1" ]]; then
+			systemctl --user enable $SERVICE_NAME-timer-2.timer
 		fi
 	fi
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Enable services) Services successfully Enabled." | tee -a "$LOG_SCRIPT"
@@ -555,20 +558,20 @@ script_delete_save() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) WARNING! This will delete the server's save game." | tee -a "$LOG_SCRIPT"
 		read -p "Are you sure you want to delete the server's save game? (y/n): " DELETE_SERVER_SAVE
 		if [[ "$DELETE_SERVER_SAVE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-			read -p "Do you also want to delete the server.json and SSK.txt? (y/n): " DELETE_SERVER_SSKJSON
+			read -p "Do you also want to delete the server.properties? (y/n): " DELETE_SERVER_SSKJSON
 			if [[ "$DELETE_SERVER_SSKJSON" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 				if [[ "$TMPFS_ENABLE" == "1" ]]; then
 					rm -rf $TMPFS_DIR
 				fi
-				rm -rf "$SRV_DIR/$WINE_PREFIX_GAME_CONFIG"/*
-				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) Deletion of save files, server.json and SSK.txt complete." | tee -a "$LOG_SCRIPT"
+				rm -rf "$(find $SRV_DIR -type f -name 'level.dat' -printf '%h\n')"
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) Deletion of save files server.properties file complete." | tee -a "$LOG_SCRIPT"
 			elif [[ "$DELETE_SERVER_SSKJSON" =~ ^([nN][oO]|[nN])$ ]]; then
 				if [[ "$TMPFS_ENABLE" == "1" ]]; then
 					rm -rf $TMPFS_DIR
 				fi
-				cd "$SRV_DIR/$WINE_PREFIX_GAME_CONFIG"
-				rm -rf $(ls | grep -v server.json | grep -v SSK.txt)
-				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) Deletion of save files complete. SSK and server.json are untouched." | tee -a "$LOG_SCRIPT"
+				cd "$SRV_DIR/"
+				rm -rf $(ls | grep -v server.properties)
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) Deletion of save files complete. The server.properties file untouched." | tee -a "$LOG_SCRIPT"
 			fi
 		elif [[ "$DELETE_SERVER_SAVE" =~ ^([nN][oO]|[nN])$ ]]; then
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) Save deletion canceled." | tee -a "$LOG_SCRIPT"
@@ -938,9 +941,9 @@ script_install_services() {
 
 		[Service]
 		Type=forking
-		WorkingDirectory=$SERVER_SYNC
+		WorkingDirectory=$SERVER_SYNC_DIR
 		EOF
-		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-serversync-tmux.sock new-session -d -s ServerSync 'java -jar "'$(ls -v '$SERVER_SYNC' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
+		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-serversync-tmux.sock new-session -d -s ServerSync 'java -jar "'$(ls -v '$SERVER_SYNC_DIR' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service <<- EOF
 		ExecStop=/usr/bin/tmux -L %u-serversync-tmux.sock kill-session -t ServerSync
 
@@ -1142,6 +1145,13 @@ script_install() {
 		SCRIPT_UPDATE_ENABLED="0"
 	fi
 	
+	read -p "Install ServerSync? (y/n): " SERVERSYNC_SETUP
+	if [[ "$SERVERSYNC_SETUP" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+		SERVERSYNC_INSTALL="1"
+	else
+		SERVERSYNC_INSTALL="0"
+	fi
+	
 	echo ""
 	read -p "Enable email notifications (y/n): " POSTFIX_ENABLE
 	if [[ "$POSTFIX_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
@@ -1267,15 +1277,21 @@ script_install() {
 	fi
 	
 	echo "Creating folder structure for server..."
-	mkdir -p /home/$USER/{backups,logs,scripts,server,serversync,updates}
+	mkdir -p /home/$USER/{backups,logs,scripts,server,updates}
 	cp "$(readlink -f $0)" $SCRIPT_DIR
 	chmod +x $SCRIPT_DIR/$SCRIPT_NAME
 	
 	echo "Installing tmux configuration for server console and logs"
 	script_install_tmux_config
 	
-	echo "Installing update script"
-	script_install_update_script
+	if [[ "$SERVERSYNC_INSTALL" == "1" ]]; then
+		echo "Downloading and installing ServerSync from github."
+		mkdir -p /home/$USER/serversync
+		curl -s https://api.github.com/repos/official-antistasi-community/A3-Antistasi/releases/latest | jq -r ".assets[] | select(.name | contains(\"jar\")) | .browser_download_url" | wget -i -
+		cp $PWD/serversync*.jar /home/$USER/serversync/
+		sudo chown -R $USER:users /home/$USER/serversync
+		su - $USER -c "systemctl --user enable $SERVICE_NAME-serversync.service"
+	fi
 	
 	touch $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'tmpfs_enable='"$TMPFS_ENABLE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
@@ -1290,8 +1306,9 @@ script_install() {
 	echo 'script_updates='"$SCRIPT_UPDATE_ENABLED" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'bckp_delold=14' >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'log_delold=7' >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'serversync='"$SERVERSYNC_INSTALL" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	
-	sudo chown -R $USER:users /home/$USER/{backups,logs,scripts,server,serversync,updates}
+	sudo chown -R $USER:users /home/$USER/{backups,logs,scripts,server,updates}
 	
 	echo "Installation complete"
 	echo ""
