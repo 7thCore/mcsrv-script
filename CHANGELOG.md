@@ -3,6 +3,7 @@ Update 2020-01-14
 -fixed save deletion function
 -removed old script updating code
 -added ServerSync installation function
+-fixed script update function (bug when multiple servers/scripts are updating at the same time)
 
 -------------------------
 
