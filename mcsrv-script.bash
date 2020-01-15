@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202001141925"
+export VERSION="202001152323"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -25,11 +25,13 @@ if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
 	#Email configuration
 	EMAIL_SENDER=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_sender | cut -d = -f2) #Send emails from this address
 	EMAIL_RECIPIENT=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_recipient | cut -d = -f2) #Send emails to this address
+	EMAIL_UPDATE_SCRIPT=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep discord_update_script | cut -d = -f2) #Send notification when the script updates
 	EMAIL_START=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_start | cut -d = -f2) #Send emails when the server starts up
 	EMAIL_STOP=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_stop | cut -d = -f2) #Send emails when the server shuts down
 	EMAIL_CRASH=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_crash | cut -d = -f2) #Send emails when the server crashes
 
 	#Discord configuration
+	DISCORD_UPDATE_SCRIPT=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep discord_update_script | cut -d = -f2) #Send notification when the script updates
 	DISCORD_START=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep discord_start | cut -d = -f2) #Send notifications when the server starts
 	DISCORD_STOP=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep discord_stop | cut -d = -f2) #Send notifications when the server stops
 	DISCORD_CRASH=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep discord_crash | cut -d = -f2) #Send notifications when the server crashes
@@ -554,7 +556,7 @@ script_autobackup() {
 
 #Delete server save
 script_delete_save() {
-	if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" != "active" ]]; then
+	if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" != "active" ]] && [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" != "activating" ]] && [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" != "deactivating" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Delete save) WARNING! This will delete the server's save game." | tee -a "$LOG_SCRIPT"
 		read -p "Are you sure you want to delete the server's save game? (y/n): " DELETE_SERVER_SAVE
 		if [[ "$DELETE_SERVER_SAVE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
@@ -979,11 +981,32 @@ script_update_github() {
 		if [ "$GITHUB_VERSION" -gt "$VERSION" ]; then
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) Script update detected." | tee -a $LOG_SCRIPT
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) Installed:$VERSION, Available:$GITHUB_VERSION" | tee -a $LOG_SCRIPT
+			
+			if [[ "$DISCORD_UPDATE_SCRIPT" == "1" ]]; then
+				while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+					curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) Update detected. Installing update.\"}" "$DISCORD_WEBHOOK"
+				done < $SCRIPT_DIR/discord_webhooks.txt
+			fi
+			
 			git clone https://github.com/7thCore/$SERVICE_NAME-script /$UPDATE_DIR/$SERVICE_NAME-script
 			rm $SCRIPT_DIR/$SERVICE_NAME-script.bash
 			cp --remove-destination $UPDATE_DIR/$SERVICE_NAME-script/$SERVICE_NAME-script.bash $SCRIPT_DIR/$SERVICE_NAME-script.bash
 			chmod +x $SCRIPT_DIR/$SERVICE_NAME-script.bash
 			rm -rf $UPDATE_DIR/$SERVICE_NAME-script
+			
+			if [[ "$EMAIL_UPDATE_SCRIPT" == "1" ]]; then
+				mail -r "$EMAIL_SENDER ($NAME-$USER)" -s "Notification: Script Update" $EMAIL_RECIPIENT <<- EOF
+				Script was updated. Please check the update notes if there are any additional steps to take.
+				Previous version: $VERSION
+				Current version: $GITHUB_VERSION
+				EOF
+			fi
+			
+			if [[ "$DISCORD_UPDATE_SCRIPT" == "1" ]]; then
+				while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+					curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) Update complete. Installed version: $GITHUB_VERSION.\"}" "$DISCORD_WEBHOOK"
+				done < $SCRIPT_DIR/discord_webhooks.txt
+			fi
 		else
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) No new script updates detected." | tee -a $LOG_SCRIPT
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script update) Installed:$VERSION, Available:$VERSION" | tee -a $LOG_SCRIPT
@@ -1064,7 +1087,7 @@ script_install_packages() {
 			echo "Include = /etc/pacman.d/mirrorlist" >> /mnt/etc/pacman.conf
 			
 			#Install packages and enable services
-			sudo pacman -Syu --noconfirm rsync unzip p7zip wget curl tmux postfix zip jre8-openjdk
+			sudo pacman -Syu --noconfirm rsync unzip p7zip wget curl tmux postfix zip jre8-openjdk jq
 		elif [[ "$DISTRO" == "ubuntu" ]]; then
 			#Ubuntu distro
 			
@@ -1072,8 +1095,7 @@ script_install_packages() {
 			UBUNTU_CODENAME=$(cat /etc/os-release | grep "^UBUNTU_CODENAME=" | cut -d = -f2)
 			
 			#Install packages and enable services
-			sudo apt install --install-recommends steamcmd
-			sudo apt install rsync unzip p7zip wget curl tmux zip postfix
+			sudo apt install rsync unzip p7zip wget curl tmux zip postfix jq
 		fi
 		echo "Package installation complete."
 	else
@@ -1081,7 +1103,6 @@ script_install_packages() {
 		echo "This script currently supports Arch Linux and Ubuntu 19.10"
 		exit 1
 	fi
-
 }
 
 script_install() {
@@ -1167,6 +1188,11 @@ script_install() {
 		echo ""
 		read -p "Enter the email that will recieve the notifications (example: example2@gmail.com): " POSTFIX_RECIPIENT
 		echo ""
+		echo ""
+		read -p "Email notifications for script updates? (y/n): " POSTFIX_UPDATE_SCRIPT_ENABLE
+			if [[ "$POSTFIX_UPDATE_SCRIPT_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+				POSTFIX_UPDATE_SCRIPT="1"
+			fi
 		read -p "Email notifications for server startup? (WARNING: this can be anoying) (y/n): " POSTFIX_CRASH_ENABLE
 			if [[ "$POSTFIX_CRASH_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 				POSTFIX_START="1"
@@ -1221,6 +1247,11 @@ script_install() {
 		echo "EACH ONE HAS TO BE IN IT'S OWN LINE!"
 		echo ""
 		read -p "Enter your first webhook for the server: " DISCORD_WEBHOOK
+		echo ""
+		read -p "Discord notifications for game updates? (y/n): " DISCORD_UPDATE_SCRIPT_ENABLE
+			if [[ "$DISCORD_UPDATE_SCRIPT_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+				DISCORD_UPDATE_SCRIPT="1"
+			fi
 		echo ""
 		read -p "Discord notifications for server startup? (y/n): " DISCORD_START_ENABLE
 			if [[ "$DISCORD_START_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
@@ -1299,9 +1330,11 @@ script_install() {
 	echo 'tmpfs_enable='"$TMPFS_ENABLE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_sender='"$POSTFIX_SENDER" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_recipient='"$POSTFIX_RECIPIENT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'email_update_script='"$POSTFIX_UPDATE_SCRIPT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_start='"$POSTFIX_START" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_stop='"$POSTFIX_STOP" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_crash='"$POSTFIX_CRASH" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'discord_update_script='"$DISCORD_UPDATE_SCRIPT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_start='"$DISCORD_START" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_stop='"$DISCORD_STOP" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_crash='"$DISCORD_CRASH" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
@@ -1326,6 +1359,22 @@ if [[ $(pidof -o %PPID -x $0) -gt "0" ]]; then
 	exit 0
 fi
 
+if [ "$EUID" -ne "0" ] && [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ]; then #Check if script executed as root, if not generate missing config fields
+	CONFIG_FIELDS="tmpfs_enable,email_sender,email_recipient,email_update_script,email_start,email_stop,email_crash,discord_update_script,discord_start,discord_stop,discord_crash,script_updates,bckp_delold,log_delold,serversync"
+	IFS=","
+	for CONFIG_FIELD in $CONFIG_FIELDS; do
+		if ! grep -q $CONFIG_FIELD $SCRIPT_DIR/$SERVICE_NAME-config.conf; then
+			if [[ "$CONFIG_FIELD" == "bckp_delold" ]]; then
+				echo "$CONFIG_FIELD=14" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+			elif [[ "$CONFIG_FIELD" == "log_delold" ]]; then
+				echo "$CONFIG_FIELD=7" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+			else
+				echo "$CONFIG_FIELD=0" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+			fi
+		fi
+	done
+fi
+
 case "$1" in
 	-help)
 		echo -e "${CYAN}Time: $(date +"%Y-%m-%d %H:%M:%S") ${NC}"
@@ -1348,7 +1397,6 @@ case "$1" in
 		echo -e "${GREEN}install_aliases ${RED}- ${GREEN}Installs .bashrc aliases for easy access to the server tmux session.${NC}"
 		echo -e "${GREEN}rebuild_tmux_config ${RED}- ${GREEN}Reinstalls the tmux configuration file from the script. Usefull if any tmux configuration updates occoured.${NC}"
 		echo -e "${GREEN}rebuild_services ${RED}- ${GREEN}Reinstalls the systemd services from the script. Usefull if any service updates occoured.${NC}"
-		echo -e "${GREEN}rebuild_update_script ${RED}- ${GREEN}Reinstalls the update script that keeps the primary script up-to-date from github.${NC}"
 		echo -e "${GREEN}disable_services ${RED}- ${GREEN}Disables all services. The server and the script will not start up on boot anymore.${NC}"
 		echo -e "${GREEN}enable_services ${RED}- ${GREEN}Enables all services dependant on the configuration file of the script.${NC}"
 		echo -e "${GREEN}reload_services ${RED}- ${GREEN}Reloads all services, dependant on the configuration file.${NC}"
