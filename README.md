@@ -1,17 +1,21 @@
 # mcsrv-script
 Bash script for running Minecraft on a linux server
 
+-------------------------
+
 **Required packages**
 
 - java
 
 - rsync
 
-- tmux
+- tmux (minimum version: 2.9a)
 
 - postfix (optional for email notifications)
 
 - zip (optional but required if using the email feature)
+
+-------------------------
 
 **Features:**
 
@@ -51,45 +55,98 @@ Bash script for running Minecraft on a linux server
 
 - supports multiple discord webhooks
 
-**Instructions:**
+-------------------------
+
+# WARNING
+
+- Script updates from GitHub: These may include malicious code to steal any info the script uses to work, like email credentials and discord webhooks.
+Now I'm not saying that I'm that kind of person that would do that but:
+
+**IF YOU DON'T TRUST ME, LEAVE THIS OFF FOR SECURITY REASONS!**
+
+-------------------------
+
+# What does this script do?
+
+This script creates a new non-sudo enabled user and installes the game in a folder called server in the user's home folder. It also installes systemd services for starting and shutting down the game server when the computer starts up, shuts down or reboots and also installs systemd timers so the script is executed on timed intervals (every 15 minutes) to do it's work like automatic game and mod updates, backups and syncing from ramdisk to hdd. It will also create a config file in the script folder that will save the configuration you defined between the installation process. The reason for user creation is to limit the script's privliges so it CAN NOT be used with sudo when handeling the game server. Sudo is only needed for installing the script (for user creation) and installing packages (it the script supports the distro you are running).
+
+-------------------------
+
+# Supported distros
+
+- Arch Linux
+
+- Ubuntu 19.10
+
+I will add suport for the next Ubuntu LTS version when it's released.
+
+The script can, in theory run on any systemd-enabled distro. So if you are not using Arch Linux or Ubuntu 19.10 I suggest you check your distro's wiki on how to install the required packages. The script can, in theory install packages for any Ubuntu version, but the repositories for old versions of Ubuntu might have outdated packages and cause problems.
+
+-------------------------
+
+# Installation
+
+-------------------------
+
+**Download the script:**
 
 Log in to your server with ssh and execute:
 
-```git clone https://github.com/7thCore/mcsrv-script```
+`git clone https://github.com/7thCore/mcsrv-script`
 
 Make it executable:
 
-```chmod +x ./mcsrv-script.bash```
+`chmod +x ./mcsrv-script.bash`
 
-If you plan on using a ramdisk to run your server from, the script will give you that option.
+-------------------------
 
-Now for the installation.
+**Installation:**
 
 If you wish you can have the script install the required packages with (Only for Arch Linux & Ubuntu 19.10):
 
-```sudo ./mcsrv-script.bash -install_packages```
+`sudo ./mcsrv-script.bash -install_packages`
 
 After that run the script with root permitions like so (necessary for user creation):
 
-```sudo ./mcsrv-script.bash -install```
+`sudo ./mcsrv-script.bash -install`
 
-The script will create a new non-sudo enabled user from wich the game server will run. If you want to have multiple game servers on the same machine just run the script multiple times but with a diffrent username inputted to the script.
+You can also install bash aliases to make your life easier by logging in to the newly created user and executing the script with the following command:
 
-Copy your game files to the server folder in the created user's home folder.
+`./mcsrv-script.bash -install_aliases`
 
-After the installation finishes you can reboot the operating system and the service files will start the game server automaticly on boot.
-
-You can also install bash aliases to make your life easier with the following command:
-
-```./mcsrv-script.bash -install_aliases```
-
-After that relog.
-
-Any other script commands are available with:
-
-```./mcsrv-script.bash -help```
+After the installation finishes copy your game files to the server folder in the created user's home folder and then reboot the operating system and the service files will start the game server automaticly on boot.
 
 That should be it.
+
+-------------------------
+
+# Available commands:
+
+| Command | Description |
+| ------- | ----------- |
+| `-help` | Prints a list of commands and their description |
+| `-start` | Start the server |
+| `-stop` | Stop the server |
+| `-restart` | Restart the server |
+| `-autorestart` | Automaticly restart the server if it's not running |
+| `-save` | Issue the save command to the server |
+| `-sync` | Sync from tmpfs to hdd/ssd |
+| `-backup` | Backup files, if server running or not |
+| `-autobackup` | Automaticly backup files when server running |
+| `-deloldbackup` | Delete old backups |
+| `-install_aliases` | Installs .bashrc aliases for easy access to the server tmux session |
+| `-rebuild_tmux_config` | Reinstalls the tmux configuration file from the script. Usefull if any tmux configuration updates occoured |
+| `-rebuild_services` | Reinstalls the systemd services from the script. Usefull if any service updates occoured |
+| `-disable_services` | Disables all services. The server and the script will not start up on boot anymore |
+| `-enable_services` | Enables all services dependant on the configuration file of the script |
+| `-reload_services` | Reloads all services, dependant on the configuration file |
+| `-update_script` | Check github for script updates and update if newer version available |
+| `-update_script_force` | Get latest script from github and install it no matter what the version |
+| `-status` | Display status of server |
+| `-install` | Installs all the needed files for the script to run, the wine prefix and the game |
+| `-install_packages` | Installs all the needed packages (Supports only Arch linux & Ubuntu 19.10 and onward) |
+
+-------------------------
 
 **Known issues are:**
 
