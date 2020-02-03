@@ -148,6 +148,8 @@ That should be it.
 
 -------------------------
 
-**Known issues are:**
+# Known issues:
 
--none at the moment
+| Issue | Resolution |
+| ----- | ---------- |
+| Ubuntu 18.04 LTS Support (Script can't enable services during installation) | This version of Ubuntu has a bug in it's systemd component, meaning the script CAN NOT enable the services required for the game to start up after boot. You will have to do this manually by rebooting the os and logging in with the username you designated at the beginning of the install procedure then execute the script with the `-enable_services` argument. |
