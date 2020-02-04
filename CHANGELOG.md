@@ -1,3 +1,11 @@
+Update 2020-02-05
+
+- fixed -help asking for username and thinking it's in installation mode
+- fixed Arch Linux package installation
+- modified script displaying configuration is missing in installation mode
+
+-------------------------
+
 Update 2020-02-03
 
 - fixed bug that affected reading configuration from file and assigning it to the correct variables
