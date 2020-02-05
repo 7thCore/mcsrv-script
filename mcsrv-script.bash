@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202002050015"
+export VERSION="202002052004"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -16,7 +16,7 @@ else
 	elif [[ "-install_packages" == "$1" ]]; then
 		echo "Commencing installation of required packages."
 	elif [[ "-help" == "$1" ]]; then
-		echo ""
+		echo "Displaying help message"
 	else
 		echo "Error: This script, once installed, is meant to be used by the user it created and should not under any circumstances be used with sudo or by the root user for the $1 function. Only -install and -install_packages work with sudo/root. Log in to your created user (default: minecraft) with sudo -i -u minecraft and execute your script without root from the coresponding scripts folder."
 		exit 1
