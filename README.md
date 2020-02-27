@@ -142,6 +142,7 @@ That should be it.
 | `-reload_services` | Reloads all services, dependant on the configuration file |
 | `-update_script` | Check github for script updates and update if newer version available |
 | `-update_script_force` | Get latest script from github and install it no matter what the version |
+| `-attach` | Attaches to the tmux session of the server |
 | `-status` | Display status of server |
 | `-install` | Installs all the needed files for the script to run, systemd services and timers and the game |
 | `-install_packages` | Installs all the needed packages (Supports only Arch linux & Ubuntu 19.10 and onward) |
