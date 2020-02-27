@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202002052004"
+export VERSION="202002271217"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -136,14 +136,9 @@ script_status() {
 	fi
 }
 
-#If the script variable is set to 0, the script won't issue any commands ran. It will just exit.
-script_enabled() {
-	script_logs
-	if [[ "$SCRIPT_ENABLED" == "0" ]]; then
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Script status) Server script is disabled" | tee -a  "$LOG_SCRIPT"
-		script_status
-		exit 0
-	fi
+#Attaches to the server tmux session
+script_attach() {
+	tmux -L $USER-tmux.sock attach -t $NAME
 }
 
 #Disable all script services
@@ -655,8 +650,7 @@ script_install_alias(){
 	
 	if [[ "$INSTALL_BASHRC_ALIAS_STATE" == "1" ]]; then
 		cat >> /home/$USER/.bashrc <<- EOF
-			alias $SERVICE_NAME-server='tmux -L $USER-tmux.sock attach -t $NAME'
-			alias $SERVICE_NAME-serversync='tmux -L $USER-serversync-tmux.sock attach -t ServerSync'
+			alias $SERVICE_NAME="/home/$USER/scripts/$SERVICE_NAME-script.bash"
 		EOF
 	fi
 	
@@ -1151,32 +1145,38 @@ script_install_packages() {
 			#Get codename
 			UBUNTU_CODENAME=$(cat /etc/os-release | grep "^UBUNTU_CODENAME=" | cut -d = -f2)
 			
-			#Add i386 architecture support
-			sudo dpkg --add-architecture i386
-			
-			#Check codename and install config for installation
-			if [[ "$UBUNTU_CODENAME" == "bionic" ]]; then
-				cat > /etc/apt/sources.list <<- EOF
-				#### ubuntu eoan #########
-				deb http://archive.ubuntu.com/ubuntu eoan main restricted universe multiverse
-				EOF
+			if [[ "$UBUNTU_CODENAME" == "bionic" || "$UBUNTU_CODENAME" == "eoan" ]]; then
+				#Add i386 architecture support
+				sudo dpkg --add-architecture i386
 				
-				cat > /etc/apt/preferences.d/eoan.pref <<- EOF
-				Package: *
-				Pin: release n=$UBUNTU_CODENAME
-				Pin-Priority: 10
+				#Check codename and install config for installation
+				if [[ "$UBUNTU_CODENAME" == "bionic" ]]; then
+					cat >> /etc/apt/sources.list <<- EOF
+					#### ubuntu eoan #########
+					deb http://archive.ubuntu.com/ubuntu eoan main restricted universe multiverse
+					EOF
+					
+					cat > /etc/apt/preferences.d/eoan.pref <<- EOF
+					Package: *
+					Pin: release n=$UBUNTU_CODENAME
+					Pin-Priority: 10
+					
+					Package: tmux
+					Pin: release n=eoan
+					Pin-Priority: 900
+					EOF
+				fi
 				
-				Package: tmux
-				Pin: release n=eoan
-				Pin-Priority: 900
-				EOF
+				#Check for updates and update local repo database
+				sudo apt update
+				
+				#Install packages and enable services
+				sudo apt install rsync unzip p7zip wget curl tmux zip postfix jq
+			else
+				echo "Error: This version of Ubuntu is not supported. Supported versions are: Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo)"
+				echo "Exiting"
+				exit 1
 			fi
-			
-			#Check for updates and update local repo database
-			sudo apt update
-			
-			#Install packages and enable services
-			sudo apt install rsync unzip p7zip wget curl tmux zip postfix jq
 		fi
 		
 		if [[ "$DISTRO" == "arch" ]]; then
@@ -1230,6 +1230,8 @@ script_install() {
 	
 	sudo useradd -m -g users -s /bin/bash $USER
 	echo -en "$USER_PASS\n$USER_PASS\n" | sudo passwd $USER
+	
+	sudo chown -R "$USER":users "/home/$USER"
 	
 	if [[ "$TMPFS" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 		TMPFS_ENABLE="1"
@@ -1429,7 +1431,7 @@ script_install() {
 	echo 'log_delold=7' >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'serversync='"$SERVERSYNC_INSTALL" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	
-	sudo chown -R $USER:users /home/$USER/{backups,logs,scripts,server,updates}
+	sudo chown -R "$USER":users "/home/$USER"
 	
 	echo "Installation complete"
 	echo ""
@@ -1547,6 +1549,9 @@ case "$1" in
 	-status)
 		script_status
 		;;
+	-attach)
+		script_attach
+		;;
 	-send_notification_start_initialized)
 		script_send_notification_start_initialized
 		;;
@@ -1590,7 +1595,7 @@ case "$1" in
 		script_timer_two
 		;;
 	*)
-	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|disable_services|enable_services|reload_services|update_script|update_script_force|status|install}"
+	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|disable_services|enable_services|reload_services|update_script|update_script_force|attach|status|install}"
 	exit 1
 	;;
 esac
