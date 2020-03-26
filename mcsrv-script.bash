@@ -28,7 +28,8 @@ SERVICE_NAME="mcsrv" #Name of the service files, script and script log
 SRV_DIR="/home/$USER/server" #Location of the server located on your hdd/ssd
 SCRIPT_NAME="$SERVICE_NAME-script.bash" #Script name
 SCRIPT_DIR="/home/$USER/scripts" #Location of this script
-SERVER_SYNC_DIR="/home/$USER/serversync"
+UPDATE_DIR="/home/$USER/updates" #Location of update information for the script's automatic update feature
+SERVER_SYNC_DIR="/home/$USER/serversync" #Location of the serversync folder for mod updates
 
 if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
 	#Email configuration
