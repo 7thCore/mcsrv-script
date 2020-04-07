@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202003261218"
+export VERSION="202004062152"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -72,17 +72,17 @@ TMPFS_DIR="/mnt/tmpfs/$USER" #Locaton of your ramdisk. Note: you have to configu
 #TmpFs/hdd variables
 if [[ "$TMPFS_ENABLE" == "1" ]]; then
 	BCKP_SRC_DIR="$TMPFS_DIR/" #Application data of the tmpfs
-	JAR_FILE=$(ls -v $TMPFS_DIR | grep -i "forge-.*\.jar" | head -n 1)
+	JAR_FILE=$(ls -v $TMPFS_DIR | grep -i "server.jar" | head -n 1)
 	SERVICE="$SERVICE_NAME-tmpfs.service" #TmpFs service file name
 else
 	BCKP_SRC_DIR="$SRV_DIR/" #Application data of the hdd/ssd
-	JAR_FILE=$(ls -v $SRV_DIR | grep -i "forge-.*\.jar" | head -n 1)
+	JAR_FILE=$(ls -v $SRV_DIR | grep -i "server.jar" | head -n 1)
 	SERVICE="$SERVICE_NAME.service" #Hdd/ssd service file name
 fi
 
 #Backup configuration
-BCKP_SRC="config mods scripts banned-ips.json banned-players.json ops.json server.properties whitelist.json $JAR_FILE" #What files to backup, * for all
-BCKP_WORLD="Biomes Bundle"
+#BCKP_SRC="banned-ips.json banned-players.json ops.json server.properties whitelist.json world server.jar" #What files to backup, * for all
+BCKP_SRC="/home/$USER/server/"
 BCKP_DIR="/home/$USER/backups" #Location of stored backups
 BCKP_DEST="$BCKP_DIR/$(date +"%Y")/$(date +"%m")/$(date +"%d")" #How backups are sorted, by default it's sorted in folders by month and day
 
@@ -109,6 +109,18 @@ script_logs() {
 	if [ ! -d "$LOG_DIR" ]; then
 		mkdir -p $LOG_DIR
 	fi
+}
+
+#Deletes old files
+script_remove_old_files() {
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Remove old files) Beginning removal of old files." | tee -a "$LOG_SCRIPT"
+	#Delete old logs
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Remove old files) Removing old script logs: $LOG_DELOLD days old." | tee -a "$LOG_SCRIPT"
+	find $LOG_DIR_ALL/* -mtime +$LOG_DELOLD -delete
+	#Delete empty folders
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Remove old files) Removing empty script log folders." | tee -a "$LOG_SCRIPT"
+	find $LOG_DIR_ALL/ -type d -empty -delete
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Remove old files) Removal of old files complete." | tee -a "$LOG_SCRIPT"
 }
 
 #Deletes old logs
@@ -292,7 +304,7 @@ script_send_notification_stop_complete() {
 	fi
 	if [[ "$DISCORD_STOP" == "1" ]]; then
 		while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
-			curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Stop) Server shutdown complete\"}" "$DISCORD_WEBHOOK"
+			curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Stop) Server shutdown complete.\"}" "$DISCORD_WEBHOOK"
 		done < $SCRIPT_DIR/discord_webhooks.txt
 	fi
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Stop) Server shutdown complete." | tee -a "$LOG_SCRIPT"
@@ -583,7 +595,7 @@ script_backup() {
 	#Backup source to destination
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Backup) Backup has been initiated." | tee -a  "$LOG_SCRIPT"
 	cd "$BCKP_SRC_DIR"
-	tar -cpvzf $BCKP_DEST/$(date +"%Y%m%d%H%M").tar.gz $BCKP_SRC "$BCKP_WORLD" #| sed -e "s/^/$(date +"%Y-%m-%d %H:%M:%S") [$NAME] [INFO] (Backup) Compressing: /" | tee -a  "$LOG_SCRIPT"
+	tar -cpvzf $BCKP_DEST/$(date +"%Y%m%d%H%M").tar.gz "$BCKP_SRC" #| sed -e "s/^/$(date +"%Y-%m-%d %H:%M:%S") [$NAME] [INFO] (Backup) Compressing: /" | tee -a  "$LOG_SCRIPT"
 	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Backup) Backup complete." | tee -a  "$LOG_SCRIPT"
 }
 
@@ -633,6 +645,86 @@ script_delete_save() {
 	fi
 }
 
+#Check for updates. If there are updates available, shut down the server, update it and restart it.
+script_update() {
+	script_logs
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Initializing update check." | tee -a "$LOG_SCRIPT"
+	
+	if [ ! -f $UPDATE_DIR/installed.version ] ; then
+		touch $UPDATE_DIR/installed.version
+		echo "0" > $UPDATE_DIR/installed.version
+	fi
+	
+	if [ ! -f $UPDATE_DIR/installed.sha1 ] ; then
+		touch $UPDATE_DIR/installed.sha1
+		echo "0" > $UPDATE_DIR/installed.sha1
+	fi
+	
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Connecting to mojang servers." | tee -a "$LOG_SCRIPT"
+	
+	LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
+	JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
+	JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
+	JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
+	
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Received application info data." | tee -a "$LOG_SCRIPT"
+	
+	INSTALLED_VERSION=$(cat $UPDATE_DIR/installed.version)
+	INSTALLED_SHA1=$(cat $UPDATE_DIR/installed.sha1)
+	
+	if [[ "$JAR_SHA1" != "$INSTALLED_SHA1" ]]; then
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected." | tee -a "$LOG_SCRIPT"
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Available: Version: $LATEST_VERSION, SHA1: $JAR_SHA1" | tee -a "$LOG_SCRIPT"
+		
+		if [[ "$DISCORD_UPDATE" == "1" ]]; then
+			while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+				curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected. Installing update.\"}" "$DISCORD_WEBHOOK"
+			done < $SCRIPT_DIR/discord_webhooks.txt
+		fi
+		
+		if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
+			sleep 1
+			WAS_ACTIVE="1"
+			script_stop
+			sleep 1
+		fi
+		
+		if [[ "$TMPFS_ENABLE" == "1" ]]; then
+			rm -rf $TMPFS_DIR/*
+		fi
+		
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Updating..." | tee -a "$LOG_SCRIPT"
+		
+		rm $SRV_DIR/server.jar
+		wget -O $SRV_DIR/server.json $(curl -s "$JAR_URL" | jq '.downloads.server .url')
+		
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Update completed." | tee -a "$LOG_SCRIPT"
+		echo "$LATEST_VERSION" > $UPDATE_DIR/installed.version
+		echo "$JAR_SHA1" > $UPDATE_DIR/installed.sha1
+		
+		if [ "$WAS_ACTIVE" == "1" ]; then
+			sleep 1
+			script_start
+		fi
+		
+		if [[ "$EMAIL_UPDATE" == "1" ]]; then
+			mail -r "$EMAIL_SENDER ($NAME-$USER)" -s "Notification: Update" $EMAIL_RECIPIENT <<- EOF
+			Server was updated. Please check the update notes if there are any additional steps to take.
+			EOF
+		fi
+		
+		if [[ "$DISCORD_UPDATE" == "1" ]]; then
+			while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+				curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Server update complete.\"}" "$DISCORD_WEBHOOK"
+			done < $SCRIPT_DIR/discord_webhooks.txt
+		fi
+	elif [[ "$JAR_SHA1" == "$INSTALLED_SHA1" ]]; then
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) No new updates detected." | tee -a "$LOG_SCRIPT"
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
+	fi
+}
+
 #Install aliases in .bashrc
 script_install_alias() {
 	if [ "$EUID" -ne "0" ]; then #Check if script executed as root and asign the username for the installation process, otherwise use the executing user
@@ -660,7 +752,7 @@ script_install_alias() {
 			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Install .bashrc aliases) Installation of aliases in .bashrc complete. Re-log for the changes to take effect." | tee -a "$LOG_SCRIPT"
 			echo "Aliases:"
 			echo "$SERVICE_NAME -attach = Attaches to the server console."
-			echo "$SERVICE_NAME-serversync = Attaches to the ServerSync console."
+			echo "$SERVICE_NAME -serversync = Attaches to the ServerSync console."
 		fi
 	fi
 }
@@ -860,9 +952,7 @@ script_install_services() {
 		WorkingDirectory=$TMPFS_DIR
 		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
 		ExecStartPre=/usr/bin/rsync -av --info=progress2 $SRV_DIR/ $TMPFS_DIR
-		EOF
-		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$TMPFS_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service
-		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service <<- EOF
+		ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
 		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
 		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
@@ -898,9 +988,7 @@ script_install_services() {
 		Type=forking
 		WorkingDirectory=$SRV_DIR
 		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
-		EOF
-		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar"' $(ls -v '$SRV_DIR' | grep -i "forge-.*\.jar" | head -n 1) nogui'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service
-		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME.service <<- EOF
+		ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
 		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
 		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
@@ -1093,13 +1181,14 @@ script_timer_one() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Status) Server is in deactivating. Aborting until next scheduled execution." | tee -a "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Status) Server running." | tee -a "$LOG_SCRIPT"
-		script_del_logs
+		script_remove_old_files
 		script_cleardrops
 		script_saveoff
 		script_save
 		script_sync
 		script_autobackup
 		script_saveon
+		script_update
 		script_update_github
 	fi
 }
@@ -1116,11 +1205,12 @@ script_timer_two() {
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Status) Server is in deactivating. Aborting until next scheduled execution." | tee -a "$LOG_SCRIPT"
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Status) Server running." | tee -a "$LOG_SCRIPT"
-		script_del_logs
+		script_remove_old_files
 		script_saveoff
 		script_save
 		script_sync
 		script_saveon
+		script_update
 		script_update_github
 	fi
 }
@@ -1186,7 +1276,7 @@ script_install_packages() {
 		echo "Package installation complete."
 	else
 		echo "os-release file not found. Is this distro supported?"
-		echo "This script currently supports Arch Linux, Ubutnu 18.04 LTS (see known issues) and Ubuntu 19.10"
+		echo "This script currently supports Arch Linux, Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo)"
 		exit 1
 	fi
 }
@@ -1277,6 +1367,13 @@ script_install() {
 		echo ""
 		read -p "Enter the email that will recieve the notifications (example: example2@gmail.com): " POSTFIX_RECIPIENT
 		echo ""
+		read -p "Email notifications for game updates? (y/n): " POSTFIX_UPDATE_ENABLE
+			if [[ "$POSTFIX_UPDATE_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+				POSTFIX_UPDATE="1"
+			else
+				POSTFIX_UPDATE="0"
+			fi
+		echo ""
 		read -p "Email notifications for script updates from github? (y/n): " POSTFIX_UPDATE_SCRIPT_ENABLE
 			if [[ "$POSTFIX_UPDATE_SCRIPT_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 				POSTFIX_UPDATE_SCRIPT="1"
@@ -1331,6 +1428,7 @@ script_install() {
 	elif [[ "$POSTFIX_ENABLE" =~ ^([nN][oO]|[nN])$ ]]; then
 		POSTFIX_SENDER="none"
 		POSTFIX_RECIPIENT="none"
+		POSTFIX_UPDATE="0"
 		POSTFIX_UPDATE_SCRIPT="0"
 		POSTFIX_START="0"
 		POSTFIX_STOP="0"
@@ -1348,6 +1446,13 @@ script_install() {
 		if [[ "$DISCORD_WEBHOOK" == "" ]]; then
 			DISCORD_WEBHOOK="none"
 		fi
+		echo ""
+		read -p "Discord notifications for game updates? (y/n): " DISCORD_UPDATE_ENABLE
+			if [[ "$DISCORD_UPDATE_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+				DISCORD_UPDATE="1"
+			else
+				DISCORD_UPDATE="0"
+			fi
 		echo ""
 		read -p "Discord notifications for script updates from github? (y/n): " DISCORD_UPDATE_SCRIPT_ENABLE
 			if [[ "$DISCORD_UPDATE_SCRIPT_ENABLE" =~ ^([yY][eE][sS]|[yY])$ ]]; then
@@ -1377,6 +1482,7 @@ script_install() {
 				DISCORD_CRASH="0"
 			fi
 	elif [[ "$DISCORD_ENABLE" =~ ^([nN][oO]|[nN])$ ]]; then
+		DISCORD_UPDATE="0"
 		DISCORD_UPDATE_SCRIPT="0"
 		DISCORD_START="0"
 		DISCORD_STOP="0"
@@ -1440,10 +1546,12 @@ script_install() {
 	echo 'tmpfs_enable='"$TMPFS_ENABLE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_sender='"$POSTFIX_SENDER" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_recipient='"$POSTFIX_RECIPIENT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'email_update='"$POSTFIX_UPDATE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_update_script='"$POSTFIX_UPDATE_SCRIPT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_start='"$POSTFIX_START" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_stop='"$POSTFIX_STOP" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_crash='"$POSTFIX_CRASH" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'discord_update='"$DISCORD_UPDATE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_update_script='"$DISCORD_UPDATE_SCRIPT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_start='"$DISCORD_START" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_stop='"$DISCORD_STOP" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
@@ -1454,6 +1562,16 @@ script_install() {
 	echo 'serversync='"$SERVERSYNC_INSTALL" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	
 	echo "$DISCORD_WEBHOOK" > $SCRIPT_DIR/discord_webhooks.txt
+	
+	sudo chown -R "$USER":users "/home/$USER"
+	
+	echo "Installing game..."
+	
+	LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
+	JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
+	JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
+	JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
+	wget -O $SRV_DIR/server.json $(curl -s "$JAR_URL" | jq '.downloads.server .url')
 	
 	sudo chown -R "$USER":users "/home/$USER"
 	
@@ -1515,7 +1633,7 @@ case "$1" in
 		echo -e "${GREEN}-disable_services ${RED}- ${GREEN}Disables all services. The server and the script will not start up on boot anymore${NC}"
 		echo -e "${GREEN}-enable_services ${RED}- ${GREEN}Enables all services dependant on the configuration file of the script${NC}"
 		echo -e "${GREEN}-reload_services ${RED}- ${GREEN}Reloads all services, dependant on the configuration file${NC}"
-		#echo -e "${GREEN}update ${RED}- ${GREEN}Update the server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
+		echo -e "${GREEN}update ${RED}- ${GREEN}Update the server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
 		echo -e "${GREEN}-update_script ${RED}- ${GREEN}Check github for script updates and update if newer version available${NC}"
 		echo -e "${GREEN}-update_script_force ${RED}- ${GREEN}Get latest script from github and install it no matter what the version${NC}"
 		echo -e "${GREEN}-status ${RED}- ${GREEN}Display status of server${NC}"
@@ -1563,6 +1681,9 @@ case "$1" in
 		;;
 	-deloldbackup)
 		script_deloldbackup
+		;;
+	-update)
+		script_update
 		;;
 	-update_script)
 		script_update_github
@@ -1619,7 +1740,7 @@ case "$1" in
 		script_timer_two
 		;;
 	*)
-	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|disable_services|enable_services|reload_services|update_script|update_script_force|attach|status|install}"
+	echo "Usage: $0 {start|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|disable_services|enable_services|reload_services|update|update_script|update_script_force|attach|status|install}"
 	exit 1
 	;;
 esac
