@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202004062152"
+export VERSION="202004101342"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -515,7 +515,7 @@ script_start() {
 		sleep 1
 	elif [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "failed" ]]; then
 		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Start) Server failed to activate. See systemctl --user status $SERVICE for details." | tee -a "$LOG_SCRIPT"
-		read -p "Do you still want to start the server?: (y/n)" FORCE_START
+		read -p "Do you still want to start the server? (y/n): " FORCE_START
 		if [[ "$FORCE_START" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 			systemctl --user start $SERVICE
 			sleep 1
