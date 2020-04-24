@@ -53,6 +53,8 @@ This script creates a new non-sudo enabled user and installes the game in a fold
 
 - Arch Linux
 
+- Ubuntu 20.04 LTS
+
 - Ubuntu 19.10
 
 - Ubuntu 18.04 LTS (see known issues)
@@ -125,7 +127,9 @@ That should be it.
 | Command | Description |
 | ------- | ----------- |
 | `-help` | Prints a list of commands and their description |
+| `-diag` | Prints out package versions and if script files are installed |
 | `-start` | Start the server |
+| `-start_no_err` | Start the server but don't require confimation if in failed state |
 | `-stop` | Stop the server |
 | `-restart` | Restart the server |
 | `-autorestart` | Automaticly restart the server if it's not running |
