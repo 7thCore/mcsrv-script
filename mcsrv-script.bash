@@ -1422,7 +1422,11 @@ script_install_packages() {
 			
 			if [[ "$UBUNTU_CODENAME" == "bionic" || "$UBUNTU_CODENAME" == "eoan" || "$UBUNTU_CODENAME" == "focal" ]]; then
 				#Add i386 architecture support
+				apt install --yes sudo gnupg
 				sudo dpkg --add-architecture i386
+				
+				#Install software properties common
+				sudo apt install --yes software-properties-common
 				
 				#Check codename and install config for installation
 				if [[ "$UBUNTU_CODENAME" == "bionic" ]]; then
@@ -1452,6 +1456,44 @@ script_install_packages() {
 				echo "Exiting"
 				exit 1
 			fi
+		elif [[ "$DISTRO" == "debian" ]]; then
+			#Debian distro
+			
+			#Get codename
+			DEBIAN_CODENAME=$(cat /etc/os-release | grep "^VERSION_CODENAME=" | cut -d = -f2)
+			
+			if [[ "$DEBIAN_CODENAME" == "buster" ]]; then
+				#Add i386 architecture support
+				apt install --yes sudo gnupg
+				sudo dpkg --add-architecture i386
+				
+				#Install software properties common
+				sudo apt install --yes software-properties-common
+				
+				#Add non-free repo for steamcmd
+				sudo apt-add-repository non-free
+				
+				#Check codename and install backport repo if needed
+				if [[ "$DEBIAN_CODENAME" == "buster" ]]; then
+					sudo apt-add-repository "deb http://deb.debian.org/debian $DEBIAN_CODENAME-backports main"
+					sudo apt update
+					sudo apt -t buster-backports install --yes "tmux"
+				fi
+				
+				#Check for updates and update local repo database
+				sudo apt update
+				
+				#Install packages and enable services
+				sudo apt install --yes rsync unzip p7zip wget curl tmux zip postfix jq
+			else
+				echo "Error: This version of Debian is not supported. Supported versions are: Debian 10 (Buster)"
+				echo "Exiting"
+				exit 1
+			fi
+		else
+			echo "Error: This distro is not supported. This script currently supports Arch Linux, Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo), Ubuntu 20.04 LTS (Focal Fossa), Debian 10 (Buster). If you want to try the script on your distro, install the packages manually. Check the readme for required package versions."
+			echo "Exiting"
+			exit 1
 		fi
 		
 		if [[ "$DISTRO" == "arch" ]]; then
@@ -1675,11 +1717,6 @@ script_install() {
 		DISCORD_CRASH="0"
 	fi
 	
-	echo "Enabling linger"
-	sudo mkdir -p /var/lib/systemd/linger/
-	sudo touch /var/lib/systemd/linger/$USER
-	sudo mkdir -p /home/$USER/.config/systemd/user
-	
 	echo "Installing bash profile"
 	cat > /home/$USER/.bash_profile <<- 'EOF'
 	#
@@ -1697,8 +1734,18 @@ script_install() {
 	
 	sudo chown -R $USER:users /home/$USER
 	
+	echo "Enabling linger"
+	
+	sudo loginctl enable-linger $USER
+	
+	if [ -d /var/lib/systemd/linger/$USER ]; then
+		sudo mkdir -p /var/lib/systemd/linger/
+		sudo touch /var/lib/systemd/linger/$USER
+		sudo mkdir -p /home/$USER/.config/systemd/user
+	fi
+	
 	echo "Enabling services"
-		
+	
 	sudo systemctl start user@$(id -u $USER).service
 	
 	su - $USER -c "systemctl --user enable $SERVICE_NAME-timer-1.timer"
