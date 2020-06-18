@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202004242125"
+export VERSION="202006182345"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
