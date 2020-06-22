@@ -317,13 +317,17 @@ script_send_notification_stop_complete() {
 #Systemd service sends email if email notifications for crashes enabled
 script_send_notification_crash() {
 	script_logs
+	if [ ! -d "$CRASH_DIR" ]; then
+		mkdir -p "$CRASH_DIR"
+	fi
 	
 	systemctl --user status $SERVICE > $CRASH_DIR/service_log.txt
 	zip -j $CRASH_DIR/service_logs.zip $CRASH_DIR/service_log.txt
 	zip -j $CRASH_DIR/script_logs.zip $LOG_SCRIPT
+	rm $CRASH_DIR/service_log.txt
 	
 	if [[ "$EMAIL_CRASH" == "1" ]]; then
-		mail -a $LOG_DIR/service_logs.zip -a $LOG_DIR/script_logs.zip -a -r "$EMAIL_SENDER ($NAME $USER)" -s "Notification: Crash" $EMAIL_RECIPIENT <<- EOF
+		mail -a $CRASH_DIR/service_logs.zip -a $CRASH_DIR/script_logs.zip -a -r "$EMAIL_SENDER ($NAME $USER)" -s "Notification: Crash" $EMAIL_RECIPIENT <<- EOF
 		The server crashed 3 times in the last 5 minutes. Automatic restart is disabled and the server is inactive. Please check the logs for more information.
 		
 		Attachment contents:
@@ -334,8 +338,6 @@ script_send_notification_crash() {
 		
 		Contact the script developer 7thCore on discord for help regarding any problems the script may have caused.
 		EOF
-		rm $LOG_DIR/service_log.txt
-		rm -rf $LOG_DIR/*.zip
 	fi
 	
 	if [[ "$DISCORD_CRASH" == "1" ]]; then
