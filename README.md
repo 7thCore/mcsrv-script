@@ -82,6 +82,12 @@ The script can, in theory run on any systemd-enabled distro. So if you are not u
 
 - rsync
 
+- curl
+
+- jq
+
+- wget
+
 - tmux (minimum version: 2.9a)
 
 - postfix (optional for email notifications)

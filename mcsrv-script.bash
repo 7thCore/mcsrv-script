@@ -2,7 +2,7 @@
 
 #Minecraft server script by 7thCore
 #If you do not know what any of these settings are you are better off leaving them alone. One thing might brake the other if you fiddle around with it.
-export VERSION="202006222354"
+export VERSION="202007221311"
 
 #Basics
 export NAME="McSrv" #Name of the tmux session
@@ -32,6 +32,9 @@ UPDATE_DIR="/home/$USER/updates" #Location of update information for the script'
 SERVER_SYNC_DIR="/home/$USER/serversync" #Location of the serversync folder for mod updates
 
 if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
+	#Game type (vanilla, spigot, forge)
+	GAME_TYPE=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep type= | cut -d = -f2) #Send emails from this address
+	
 	#Email configuration
 	EMAIL_SENDER=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_sender= | cut -d = -f2) #Send emails from this address
 	EMAIL_RECIPIENT=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep email_recipient= | cut -d = -f2) #Send emails to this address
@@ -57,7 +60,10 @@ if [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ] ; then
 
 	#Ignore failed startups during update configuration
 	UPDATE_IGNORE_FAILED_ACTIVATIONS=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep update_ignore_failed_startups= | cut -d = -f2)
-
+	
+	#Automatic updates for vanilla minecraft
+	GAME_SERVER_UPDATES=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep ^updates= | cut -d = -f2) #Get configuration for script updates.
+	
 	#Script updates from github
 	SCRIPT_UPDATES_GITHUB=$(cat $SCRIPT_DIR/$SERVICE_NAME-config.conf | grep script_updates= | cut -d = -f2) #Get configuration for script updates.
 	
@@ -74,14 +80,24 @@ TMPFS_DIR="/mnt/tmpfs/$USER" #Locaton of your ramdisk. Note: you have to configu
 
 #TmpFs/hdd variables
 if [[ "$TMPFS_ENABLE" == "1" ]]; then
-	BCKP_SRC_DIR="$TMPFS_DIR/" #Application data of the tmpfs
-	JAR_FILE=$(ls -v $TMPFS_DIR | grep -i "server.jar" | head -n 1)
-	SERVICE="$SERVICE_NAME-tmpfs.service" #TmpFs service file name
+        BCKP_SRC_DIR="$TMPFS_DIR/" #Application data of the tmpfs
+		if [[ "$GAME_TYPE" == "1" ]]; then
+			SERVICE="$SERVICE_NAME-vanilla-tmpfs.service" #TmpFs vanilla service file name
+		elif [[ "$GAME_TYPE" == "2" ]]; then
+			SERVICE="$SERVICE_NAME-spigot-tmpfs.service" #TmpFs spigot service file name
+		elif [[ "$GAME_TYPE" == "3" ]]; then
+			SERVICE="$SERVICE_NAME-forge-tmpfs.service" #TmpFs forge service file name
+		fi
 else
-	BCKP_SRC_DIR="$SRV_DIR/" #Application data of the hdd/ssd
-	JAR_FILE=$(ls -v $SRV_DIR | grep -i "server.jar" | head -n 1)
-	SERVICE="$SERVICE_NAME.service" #Hdd/ssd service file name
-fi
+	    BCKP_SRC_DIR="$SRV_DIR/" #Application data of the hdd/ssd
+		if [[ "$GAME_TYPE" == "1" ]]; then
+			SERVICE="$SERVICE_NAME-vanilla.service" #Hdd/ssd vanilla service file name
+		elif [[ "$GAME_TYPE" == "2" ]]; then
+			SERVICE="$SERVICE_NAME-spigot.service" #Hdd/ssd spigot service file name
+		elif [[ "$GAME_TYPE" == "3" ]]; then
+			SERVICE="$SERVICE_NAME-forge.service" #Hdd/ssd forgeservice file name
+		fi
+	fi
 
 #Backup configuration
 #BCKP_SRC="banned-ips.json banned-players.json ops.json server.properties whitelist.json world server.jar" #What files to backup, * for all
@@ -364,7 +380,7 @@ script_saveon() {
 		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-on" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
-			if [[ "$line" =~ "[Server thread/INFO]: Automatic saving is now enabled" ]]; then
+			if [[ "$line" =~ "[Server thread/INFO]:" ]] && [[ "$line" =~ "Automatic saving is now enabled" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save on) Autosaving has been Activated." | tee -a  "$LOG_SCRIPT"
 				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Automatic world saving is enabled." ENTER
 				break
@@ -391,7 +407,7 @@ script_saveoff() {
 		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-off" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
-			if [[ "$line" =~ "[Server thread/INFO]: Automatic saving is now disabled" ]]; then
+			if [[ "$line" =~ "[Server thread/INFO]:" ]] && [[ "$line" =~ "Automatic saving is now disabled" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save off) Autosaving has been deactivated." | tee -a  "$LOG_SCRIPT"
 				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say Automatic world saving is disabled." ENTER
 				break
@@ -418,7 +434,7 @@ script_save() {
 		( sleep 5 && /usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "save-all" ENTER ) &
 		timeout $TIMEOUT /bin/bash -c '
 		while read line; do
-			if [[ "$line" =~ "[Server thread/INFO]: Saved the game" ]]; then
+			if [[ "$line" =~ "[Server thread/INFO]:" ]] && [[ "$line" =~ "Saved the game" ]]; then
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Save) Save game to disk has been completed." | tee -a  "$LOG_SCRIPT"
 				/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "say World save complete." ENTER
 				break
@@ -696,90 +712,191 @@ script_delete_save() {
 #Check for updates. If there are updates available, shut down the server, update it and restart it.
 script_update() {
 	script_logs
-	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Initializing update check." | tee -a "$LOG_SCRIPT"
-	
-	if [ ! -f $UPDATE_DIR/installed.version ] ; then
-		touch $UPDATE_DIR/installed.version
-		echo "0" > $UPDATE_DIR/installed.version
+	if [[ "$GAME_SERVER_UPDATES" == "1" ]]; then
+		if [[ "$GAME_TYPE" == "1" ]]; then
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Initializing update check." | tee -a "$LOG_SCRIPT"
+			
+			if [ ! -f $UPDATE_DIR/installed.version ] ; then
+				touch $UPDATE_DIR/installed.version
+				echo "0" > $UPDATE_DIR/installed.version
+			fi
+			
+			if [ ! -f $UPDATE_DIR/installed.sha1 ] ; then
+				touch $UPDATE_DIR/installed.sha1
+				echo "0" > $UPDATE_DIR/installed.sha1
+			fi
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Connecting to mojang servers." | tee -a "$LOG_SCRIPT"
+			
+			LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
+			JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
+			JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
+			JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Received application info data." | tee -a "$LOG_SCRIPT"
+			
+			INSTALLED_VERSION=$(cat $UPDATE_DIR/installed.version)
+			INSTALLED_SHA1=$(cat $UPDATE_DIR/installed.sha1)
+			
+			if [[ "$JAR_SHA1" != "$INSTALLED_SHA1" ]]; then
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected." | tee -a "$LOG_SCRIPT"
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Available: Version: $LATEST_VERSION, SHA1: $JAR_SHA1" | tee -a "$LOG_SCRIPT"
+				
+				if [[ "$DISCORD_UPDATE" == "1" ]]; then
+					while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+						curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected. Installing update.\"}" "$DISCORD_WEBHOOK"
+					done < $SCRIPT_DIR/discord_webhooks.txt
+				fi
+				
+				if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
+					sleep 1
+					WAS_ACTIVE="1"
+					script_stop
+					sleep 1
+				fi
+				
+				if [[ "$TMPFS_ENABLE" == "1" ]]; then
+					rm -rf $TMPFS_DIR/*
+				fi
+				
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Updating..." | tee -a "$LOG_SCRIPT"
+				
+				rm $SRV_DIR/server.jar
+				wget -O $SRV_DIR/server.json "$JAR_URL"
+				
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Update completed." | tee -a "$LOG_SCRIPT"
+				echo "$LATEST_VERSION" > $UPDATE_DIR/installed.version
+				echo "$JAR_SHA1" > $UPDATE_DIR/installed.sha1
+				
+				if [ "$WAS_ACTIVE" == "1" ]; then
+					if [[ "$TMPFS_ENABLE" == "1" ]]; then
+						mkdir -p $TMPFS_DIR
+						mkdir -p $SRV_DIR
+					elif [[ "$TMPFS_ENABLE" == "0" ]]; then
+						mkdir -p $SRV_DIR
+					fi
+					sleep 1
+					if [[ "$UPDATE_IGNORE_FAILED_ACTIVATIONS" == "1" ]]; then
+						script_start_ignore_errors
+					else
+						script_start
+					fi
+				fi
+				
+				if [[ "$EMAIL_UPDATE" == "1" ]]; then
+					mail -r "$EMAIL_SENDER ($NAME-$USER)" -s "Notification: Update" $EMAIL_RECIPIENT <<- EOF
+					Server was updated. Please check the update notes if there are any additional steps to take.
+					EOF
+				fi
+				
+				if [[ "$DISCORD_UPDATE" == "1" ]]; then
+					while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+						curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Server update complete.\"}" "$DISCORD_WEBHOOK"
+					done < $SCRIPT_DIR/discord_webhooks.txt
+				fi
+			elif [[ "$JAR_SHA1" == "$INSTALLED_SHA1" ]]; then
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) No new updates detected." | tee -a "$LOG_SCRIPT"
+				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
+			fi
+		else
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) You have the wrong game type. Aborting." | tee -a  "$LOG_SCRIPT"
+		fi
 	fi
-	
-	if [ ! -f $UPDATE_DIR/installed.sha1 ] ; then
-		touch $UPDATE_DIR/installed.sha1
-		echo "0" > $UPDATE_DIR/installed.sha1
-	fi
-	
-	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Connecting to mojang servers." | tee -a "$LOG_SCRIPT"
-	
-	LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
-	JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
-	JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
-	JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
-	
-	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Received application info data." | tee -a "$LOG_SCRIPT"
-	
-	INSTALLED_VERSION=$(cat $UPDATE_DIR/installed.version)
-	INSTALLED_SHA1=$(cat $UPDATE_DIR/installed.sha1)
-	
-	if [[ "$JAR_SHA1" != "$INSTALLED_SHA1" ]]; then
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected." | tee -a "$LOG_SCRIPT"
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Available: Version: $LATEST_VERSION, SHA1: $JAR_SHA1" | tee -a "$LOG_SCRIPT"
-		
-		if [[ "$DISCORD_UPDATE" == "1" ]]; then
-			while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
-				curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) New update detected. Installing update.\"}" "$DISCORD_WEBHOOK"
-			done < $SCRIPT_DIR/discord_webhooks.txt
-		fi
-		
-		if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
-			sleep 1
-			WAS_ACTIVE="1"
-			script_stop
-			sleep 1
-		fi
-		
-		if [[ "$TMPFS_ENABLE" == "1" ]]; then
-			rm -rf $TMPFS_DIR/*
-		fi
-		
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Updating..." | tee -a "$LOG_SCRIPT"
-		
-		rm $SRV_DIR/server.jar
-		wget -O $SRV_DIR/server.json $(curl -s "$JAR_URL" | jq '.downloads.server .url')
-		
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Update completed." | tee -a "$LOG_SCRIPT"
-		echo "$LATEST_VERSION" > $UPDATE_DIR/installed.version
-		echo "$JAR_SHA1" > $UPDATE_DIR/installed.sha1
-		
-		if [ "$WAS_ACTIVE" == "1" ]; then
+}
+
+script_spigot_update() {
+	if [[ "$GAME_TYPE" == "2" ]]; then
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Update commencing. Waiting on user input..." | tee -a  "$LOG_SCRIPT"
+		read -p "Update spigot? (y/n): " UPDATE_SPIGOT
+		if [[ "$UPDATE_SPIGOT" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+			read -p "Choose spigot revision? (ex. 1.16.1): " REVISION_SPIGOT
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Update commencing." | tee -a  "$LOG_SCRIPT"
+			
+			if [[ "$(systemctl --user show -p ActiveState --value $SERVICE)" == "active" ]]; then
+				sleep 1
+				WAS_ACTIVE="1"
+				script_stop
+				sleep 1
+			fi
+			
 			if [[ "$TMPFS_ENABLE" == "1" ]]; then
-				mkdir -p $TMPFS_DIR
-				mkdir -p $SRV_DIR
-			elif [[ "$TMPFS_ENABLE" == "0" ]]; then
-				mkdir -p $SRV_DIR
+				rm -rf $TMPFS_DIR/*
 			fi
-			sleep 1
-			if [[ "$UPDATE_IGNORE_FAILED_ACTIVATIONS" == "1" ]]; then
-				script_start_ignore_errors
-			else
-				script_start
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Preparing world for new version." | tee -a  "$LOG_SCRIPT"
+			
+			( sleep 5 && /usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L $USER-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar $(ls -v '$SRV_DIR' | grep -i "spigot" | grep -i ".jar" | head -n 1) --forceUpgrade' ) &
+			timeout $TIMEOUT /bin/bash -c '
+			while read line; do
+				if [[ "$line" =~ "[Server thread/INFO]: Done " ]]; then
+					echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) World preperation complete." | tee -a  "$LOG_SCRIPT"
+					/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "stop" ENTER
+					sleep 10
+					break
+				else
+					echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Preparing world for the new version. Please wait..."
+				fi
+			done < <(tail -n1 -f $LOG_TMP)'
+			
+			SPIGOT_OLD=$(ls -v '$SRV_DIR' | grep -i "spigot" | grep -i ".jar" | head -n 1)
+			rm $SRV_DIR/$SPIGOT_OLD
+			
+			cd /home/$USER/server
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Building new version." | tee -a  "$LOG_SCRIPT"
+			
+			wget -O BuildTools.jar https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar
+			git config --global --unset core.autocrlf
+			java -jar BuildTools.jar --rev $REVISION_SPIGOT
+			
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Upgrading world." | tee -a  "$LOG_SCRIPT"
+			
+			( sleep 5 && /usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L $USER-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar $(ls -v '$SRV_DIR' | grep -i "spigot" | grep -i ".jar" | head -n 1) --forceUpgrade' ) &
+			timeout $TIMEOUT /bin/bash -c '
+			while read line; do
+				if [[ "$line" =~ "[Server thread/INFO]: Done " ]]; then
+					echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) World upgrade complete." | tee -a  "$LOG_SCRIPT"
+					/usr/bin/tmux -L $USER-tmux.sock send-keys -t $NAME.0 "stop" ENTER
+					sleep 10
+					break
+				else
+					echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Upgrading world with the new version. Please wait..."
+				fi
+			done < <(tail -n1 -f $LOG_TMP)'
+			
+			if [ "$WAS_ACTIVE" == "1" ]; then
+				if [[ "$TMPFS_ENABLE" == "1" ]]; then
+					mkdir -p $TMPFS_DIR
+					mkdir -p $SRV_DIR
+				elif [[ "$TMPFS_ENABLE" == "0" ]]; then
+					mkdir -p $SRV_DIR
+				fi
+				sleep 1
+				if [[ "$UPDATE_IGNORE_FAILED_ACTIVATIONS" == "1" ]]; then
+					script_start_ignore_errors
+				else
+					script_start
+				fi
 			fi
+			
+			if [[ "$EMAIL_UPDATE" == "1" ]]; then
+				mail -r "$EMAIL_SENDER ($NAME-$USER)" -s "Notification: Spigot update" $EMAIL_RECIPIENT <<- EOF
+				Spigot was updated. Please check the update notes if there are any additional steps to take.
+				EOF
+			fi
+			
+			if [[ "$DISCORD_UPDATE" == "1" ]]; then
+				while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+					curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Server update complete.\"}" "$DISCORD_WEBHOOK"
+				done < $SCRIPT_DIR/discord_webhooks.txt
+			fi
+		else
+			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) Update canceled." | tee -a  "$LOG_SCRIPT"
 		fi
-		
-		if [[ "$EMAIL_UPDATE" == "1" ]]; then
-			mail -r "$EMAIL_SENDER ($NAME-$USER)" -s "Notification: Update" $EMAIL_RECIPIENT <<- EOF
-			Server was updated. Please check the update notes if there are any additional steps to take.
-			EOF
-		fi
-		
-		if [[ "$DISCORD_UPDATE" == "1" ]]; then
-			while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
-				curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Server update complete.\"}" "$DISCORD_WEBHOOK"
-			done < $SCRIPT_DIR/discord_webhooks.txt
-		fi
-	elif [[ "$JAR_SHA1" == "$INSTALLED_SHA1" ]]; then
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) No new updates detected." | tee -a "$LOG_SCRIPT"
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Installed: Version: $INSTALLED_VERSION, SHA1: $INSTALLED_SHA1" | tee -a "$LOG_SCRIPT"
+	else
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Spigot update) You have the wrong game type. Aborting." | tee -a  "$LOG_SCRIPT"
 	fi
 }
 
@@ -815,28 +932,12 @@ script_install_alias() {
 	fi
 }
 
-#Install or reinstall tmux configuration
-script_install_tmux_config() {
-	if [ "$EUID" -ne "0" ]; then #Check if script executed as root and asign the username for the installation process, otherwise use the executing user
-		script_logs
-		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation commencing. Waiting on user configuration." | tee -a "$LOG_SCRIPT"
-		read -p "Are you sure you want to reinstall the tmux configuration? (y/n): " REINSTALL_TMUX_CONFIG
-		if [[ "$REINSTALL_TMUX_CONFIG" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-			INSTALL_TMUX_CONFIG_STATE="1"
-		elif [[ "$REINSTALL_TMUX_CONFIG" =~ ^([nN][oO]|[nN])$ ]]; then
-			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation aborted." | tee -a "$LOG_SCRIPT"
-			INSTALL_TMUX_CONFIG_STATE="0"
-		fi
-	else
-		INSTALL_TMUX_CONFIG_STATE="1"
-	fi
-	
-	if [[ "$INSTALL_TMUX_CONFIG_STATE" == "1" ]]; then
-		if [ -f "$SCRIPT_DIR/$SERVICE_NAME-tmux.conf" ]; then
-			rm $SCRIPT_DIR/$SERVICE_NAME-tmux.conf
-		fi
-		
-		cat > $SCRIPT_DIR/$SERVICE_NAME-tmux.conf <<- EOF
+#Install tmux configuration for specific server when first ran
+script_server_tmux_install() {
+	echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Server tmux configuration) Installing tmux configuration for server." | tee -a "$LOG_SCRIPT"
+	if [ ! -f /tmp/$USER-$SERVICE_NAME-tmux.conf ]; then
+		touch /tmp/$USER-$SERVICE_NAME-tmux.conf
+		cat > /tmp/$USER-$SERVICE_NAME-tmux.conf <<- EOF
 		#Tmux configuration
 		set -g activity-action other
 		set -g allow-rename off
@@ -902,10 +1003,9 @@ script_install_tmux_config() {
 		bind C-a send-prefix
 
 		#Bind C-a r to reload the config file
-		bind-key r source-file $SCRIPT_DIR/$SERVICE_NAME-tmux.conf \; display-message "Config reloaded!"
+		bind-key r source-file /tmp/$USER-$SERVICE_NAME-tmux.conf \; display-message "Config reloaded!"
 
 		set-hook -g session-created 'resize-window -y 24 -x 10000'
-		set-hook -g session-created "pipe-pane -o 'tee >> $LOG_TMP'"
 		set-hook -g client-attached 'resize-window -y 24 -x 10000'
 		set-hook -g client-detached 'resize-window -y 24 -x 10000'
 		set-hook -g client-resized 'resize-window -y 24 -x 10000'
@@ -922,12 +1022,7 @@ script_install_tmux_config() {
 		#Copy/ scroll mode
 		#Ctrl-b [ (in copy mode you can navigate the buffer including scrolling the history. Use vi or emacs-style key bindings in copy mode. The default is emacs. To exit copy mode use one of the following keybindings: vi q emacs Esc)
 		EOF
-	fi
-	
-	if [ "$EUID" -ne "0" ]; then
-		if [[ "$INSTALL_TMUX_CONFIG_STATE" == "1" ]]; then
-			echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Reinstall tmux configuration) Tmux configuration reinstallation complete. Restart your server for changes to take affect." | tee -a "$LOG_SCRIPT"
-		fi
+		echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Server tmux configuration) Tmux configuration for server installed successfully." | tee -a "$LOG_SCRIPT"
 	fi
 }
 
@@ -956,12 +1051,28 @@ script_install_services() {
 			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-mkdir-tmpfs.service
 		fi
 		
-		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service" ]; then
-			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla-tmpfs.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla-tmpfs.service
 		fi
 		
-		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME.service" ]; then
-			rm /home/$USER/.config/systemd/user/$SERVICE_NAME.service
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla.service
+		fi
+		
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service
+		fi
+		
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service
+		fi
+		
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service
+		fi
+		
+		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service" ]; then
+			rm /home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service
 		fi
 		
 		if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-timer-1.timer" ]; then
@@ -1002,12 +1113,16 @@ script_install_services() {
 		WantedBy=default.target
 		EOF
 		
-		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service <<- EOF
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla-tmpfs.service <<- EOF
 		[Unit]
-		Description=Minecraft Server Service
+		Description=Minecraft Vanilla TmpFs Server Service
 		Requires=$SERVICE_NAME-mkdir-tmpfs.service
 		After=network.target mnt-tmpfs.mount $SERVICE_NAME-mkdir-tmpfs.service
-		Conflicts=$SERVICE_NAME.service
+		Conflicts=$SERVICE_NAME-vanilla.service
+		Conflicts=$SERVICE_NAME-spigot-tmpfs.service
+		Conflicts=$SERVICE_NAME-spigot.service
+		Conflicts=$SERVICE_NAME-forge-tmpfs.service
+		Conflicts=$SERVICE_NAME-forge.service
 		StartLimitBurst=3
 		StartLimitIntervalSec=300
 		StartLimitAction=none
@@ -1016,9 +1131,10 @@ script_install_services() {
 		[Service]
 		Type=forking
 		WorkingDirectory=$TMPFS_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
 		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
 		ExecStartPre=/usr/bin/rsync -av --info=progress2 $SRV_DIR/ $TMPFS_DIR
-		ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
+		ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
 		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
 		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
@@ -1030,6 +1146,8 @@ script_install_services() {
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
 		ExecStop=/usr/bin/sleep 10
 		ExecStop=/usr/bin/rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
 		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
 		TimeoutStartSec=infinity
 		TimeoutStopSec=120
@@ -1040,11 +1158,15 @@ script_install_services() {
 		WantedBy=default.target
 		EOF
 		
-		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME.service <<- EOF
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla.service <<- EOF
 		[Unit]
-		Description=Minecraft Server Service
+		Description=Minecraft Vanilla Server Service
 		After=network.target
-		Conflicts=$SERVICE_NAME-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla-tmpfs.service
+		Conflicts=$SERVICE_NAME-spigot-tmpfs.service
+		Conflicts=$SERVICE_NAME-spigot.service
+		Conflicts=$SERVICE_NAME-forge-tmpfs.service
+		Conflicts=$SERVICE_NAME-forge.service
 		StartLimitBurst=3
 		StartLimitIntervalSec=300
 		StartLimitAction=none
@@ -1053,8 +1175,9 @@ script_install_services() {
 		[Service]
 		Type=forking
 		WorkingDirectory=$SRV_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
 		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
-		ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
+		ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar server.jar nogui'
 		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
 		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
@@ -1065,6 +1188,198 @@ script_install_services() {
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
 		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
 		ExecStop=/usr/bin/sleep 10
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
+		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
+		TimeoutStartSec=infinity
+		TimeoutStopSec=120
+		RestartSec=10
+		Restart=on-failure
+		
+		[Install]
+		WantedBy=default.target
+		EOF
+		
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service <<- EOF
+		[Unit]
+		Description=Minecraft Spigot Service
+		After=network.target
+		Conflicts=$SERVICE_NAME-vanilla-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla.service
+		Conflicts=$SERVICE_NAME-spigot-tmpfs.service
+		Conflicts=$SERVICE_NAME-forge-tmpfs.service
+		Conflicts=$SERVICE_NAME-forge.service
+		StartLimitBurst=3
+		StartLimitIntervalSec=300
+		StartLimitAction=none
+		OnFailure=$SERVICE_NAME-send-notification.service
+		
+		[Service]
+		Type=forking
+		WorkingDirectory=$SRV_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
+		EOF
+		
+		echo "ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar "'$(ls -v '$SRV_DIR' | grep -i "spigot" | grep -i ".jar" | head -n 1)'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service
+		
+		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service <<- EOF
+		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
+		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
+		ExecStop=/usr/bin/sleep 10
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
+		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
+		TimeoutStartSec=infinity
+		TimeoutStopSec=120
+		RestartSec=10
+		Restart=on-failure
+		
+		[Install]
+		WantedBy=default.target
+		EOF
+
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service <<- EOF
+		[Unit]
+		Description=Minecraft Spigot TmpFs Server Service
+		Requires=$SERVICE_NAME-mkdir-tmpfs.service
+		After=network.target mnt-tmpfs.mount $SERVICE_NAME-mkdir-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla.service
+		Conflicts=$SERVICE_NAME-spigot.service
+		Conflicts=$SERVICE_NAME-forge-tmpfs.service
+		Conflicts=$SERVICE_NAME-forge.service
+		StartLimitBurst=3
+		StartLimitIntervalSec=300
+		StartLimitAction=none
+		OnFailure=$SERVICE_NAME-send-notification.service
+		
+		[Service]
+		Type=forking
+		WorkingDirectory=$TMPFS_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
+		ExecStartPre=/usr/bin/rsync -av --info=progress2 $SRV_DIR/ $TMPFS_DIR
+		EOF
+		
+		echo "ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar "'$(ls -v '$TMPFS_DIR' | grep -i "spigot" | grep -i ".jar" | head -n 1)'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service
+		
+		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service <<- EOF
+		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
+		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
+		ExecStop=/usr/bin/sleep 10
+		ExecStop=/usr/bin/rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
+		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
+		TimeoutStartSec=infinity
+		TimeoutStopSec=120
+		RestartSec=10
+		Restart=on-failure
+		
+		[Install]
+		WantedBy=default.target
+		EOF
+		
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service <<- EOF
+		[Unit]
+		Description=Minecraft Forge Service
+		After=network.target
+		Conflicts=$SERVICE_NAME-vanilla-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla.service
+		Conflicts=$SERVICE_NAME-spigot-tmpfs.service
+		Conflicts=$SERVICE_NAME-spigot.service
+		Conflicts=$SERVICE_NAME-forge-tmpfs.service
+		StartLimitBurst=3
+		StartLimitIntervalSec=300
+		StartLimitAction=none
+		OnFailure=$SERVICE_NAME-send-notification.service
+		
+		[Service]
+		Type=forking
+		WorkingDirectory=$SRV_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
+		EOF
+		
+		echo "ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar "'$(ls -v '$SRV_DIR' | grep -i "forge" | grep -i ".jar" | head -n 1)'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service
+		
+		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service <<- EOF
+		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
+		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
+		ExecStop=/usr/bin/sleep 10
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
+		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
+		TimeoutStartSec=infinity
+		TimeoutStopSec=120
+		RestartSec=10
+		Restart=on-failure
+		
+		[Install]
+		WantedBy=default.target
+		EOF
+
+		cat > /home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service <<- EOF
+		[Unit]
+		Description=Minecraft Forge TmpFs Server Service
+		Requires=$SERVICE_NAME-mkdir-tmpfs.service
+		After=network.target mnt-tmpfs.mount $SERVICE_NAME-mkdir-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla-tmpfs.service
+		Conflicts=$SERVICE_NAME-vanilla.service
+		Conflicts=$SERVICE_NAME-spigot-tmpfs.service
+		Conflicts=$SERVICE_NAME-spigot.service
+		Conflicts=$SERVICE_NAME-forge.service
+		StartLimitBurst=3
+		StartLimitIntervalSec=300
+		StartLimitAction=none
+		OnFailure=$SERVICE_NAME-send-notification.service
+		
+		[Service]
+		Type=forking
+		WorkingDirectory=$TMPFS_DIR
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -server_tmux_install
+		ExecStartPre=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_initialized
+		ExecStartPre=/usr/bin/rsync -av --info=progress2 $SRV_DIR/ $TMPFS_DIR
+		EOF
+		
+		echo "ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-tmux.sock new-session -d -s $NAME 'java -server -XX:+UseG1GC -Xmx6G -Xms1G -Dsun.rmi.dgc.server.gcInterval=2147483646 -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -Dfml.ignorePatchDiscrepancies=true -Dfml.ignoreInvalidMinecraftCertificates=true -jar "'$(ls -v '$TMPFS_DIR' | grep -i "forge" | grep -i ".jar" | head -n 1)'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service
+		
+		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service <<- EOF
+		ExecStartPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_start_complete
+		ExecStop=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_initialized
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'SERVER SHUTTING DOWN IN 5!' ENTER
+		ExecStop=/usr/bin/sleep 5
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'save-all' ENTER
+		ExecStop=/usr/bin/tmux -L %u-tmux.sock send-keys -t $NAME.0 'stop' ENTER
+		ExecStop=/usr/bin/sleep 10
+		ExecStop=/usr/bin/rsync -av --info=progress2 $TMPFS_DIR/ $SRV_DIR
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.log
+		ExecStopPost=/usr/bin/rm /tmp/%u-$SERVICE_NAME-tmux.conf
 		ExecStopPost=$SCRIPT_DIR/$SCRIPT_NAME -send_notification_stop_complete
 		TimeoutStartSec=infinity
 		TimeoutStopSec=120
@@ -1151,7 +1466,7 @@ script_install_services() {
 		Type=forking
 		WorkingDirectory=$SERVER_SYNC_DIR
 		EOF
-		echo "ExecStart=/usr/bin/tmux -f $SCRIPT_DIR/$SERVICE_NAME-tmux.conf -L %u-serversync-tmux.sock new-session -d -s ServerSync 'java -jar "'$(ls -v '$SERVER_SYNC_DIR' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
+		echo "ExecStart=/usr/bin/tmux -f /tmp/%u-$SERVICE_NAME-tmux.conf -L %u-serversync-tmux.sock new-session -d -s ServerSync 'java -jar "'$(ls -v '$SERVER_SYNC_DIR' | grep -i "serversync" | head -n 1) server'\' >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service
 		cat >> /home/$USER/.config/systemd/user/$SERVICE_NAME-serversync.service <<- EOF
 		ExecStop=/usr/bin/tmux -L %u-serversync-tmux.sock kill-session -t ServerSync
 
@@ -1286,13 +1601,12 @@ script_diagnostics() {
 	sleep 3
 	
 	#Check package versions
-	echo "wine version: $(wine --version)"
-	echo "winetricks version: $(winetricks --version)"
 	echo "tmux version: $(tmux -V)"
 	echo "rsync version: $(rsync --version | head -n 1)"
 	echo "curl version: $(curl --version | head -n 1)"
 	echo "wget version: $(wget --version | head -n 1)"
-	echo "cabextract version: $(cabextract --version)"
+	echo "java version: $(java --showversion)",
+	echo "jq version: $(jq --version)"
 	echo "postfix version: $(postconf mail_version)"
 	
 	#Get distro name
@@ -1300,11 +1614,9 @@ script_diagnostics() {
 	
 	#Check package versions
 	if [[ "$DISTRO" == "arch" ]]; then
-		echo "xvfb version:$(pacman -Qi xorg-server-xvfb | grep "^Version" | cut -d : -f2)"
 		echo "postfix version:$(pacman -Qi postfix | grep "^Version" | cut -d : -f2)"
 		echo "zip version:$(pacman -Qi zip | grep "^Version" | cut -d : -f2)"
 	elif [[ "$DISTRO" == "ubuntu" ]]; then
-		echo "xvfb version:$(dpkg -s xvfb | grep "^Version" | cut -d : -f2)"
 		echo "postfix version:$(dpkg -s postfix | grep "^Version" | cut -d : -f2)"
 		echo "zip version:$(dpkg -s zip | grep "^Version" | cut -d : -f2)"
 	fi
@@ -1358,16 +1670,40 @@ script_diagnostics() {
 		echo "Tmpfs mkdir service present: No"
 	fi
 	
-	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service" ]; then
-		echo "Tmpfs service present: Yes"
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla-tmpfs.service" ]; then
+		echo "Tmpfs service for vanilla present: Yes"
 	else
-		echo "Tmpfs service present: No"
+		echo "Tmpfs service for vanilla present: No"
 	fi
 	
-	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME.service" ]; then
-		echo "Basic service present: Yes"
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla.service" ]; then
+		echo "Basic service for vanilla present: Yes"
 	else
-		echo "Basic service present: No"
+		echo "Basic service for vanilla present: No"
+	fi
+	
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service" ]; then
+		echo "Tmpfs service for spigot present: Yes"
+	else
+		echo "Tmpfs service for spigot present: No"
+	fi
+	
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service" ]; then
+		echo "Basic service for spigot present: Yes"
+	else
+		echo "Basic service for spigot present: No"
+	fi
+	
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service" ]; then
+		echo "Tmpfs service for forge present: Yes"
+	else
+		echo "Tmpfs service for forge present: No"
+	fi
+	
+	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service" ]; then
+		echo "Basic service for forge present: Yes"
+	else
+		echo "Basic service for forge present: No"
 	fi
 	
 	if [ -f "/home/$USER/.config/systemd/user/$SERVICE_NAME-timer-1.timer" ]; then
@@ -1423,7 +1759,7 @@ script_install_packages() {
 			echo "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
 			
 			#Install packages and enable services
-			sudo pacman -Syu --noconfirm rsync unzip p7zip wget curl tmux postfix zip jre8-openjdk jq
+			sudo pacman -Syu --noconfirm rsync unzip p7zip wget curl tmux postfix zip jdk8-openjdk jq #jre8-openjdk
 		elif [[ "$DISTRO" == "ubuntu" ]]; then
 			#Ubuntu distro
 			
@@ -1460,7 +1796,7 @@ script_install_packages() {
 				sudo apt update
 				
 				#Install packages and enable services
-				sudo apt install --yes rsync unzip p7zip wget curl tmux zip postfix jq
+				sudo apt install --yes rsync unzip p7zip wget curl tmux zip postfix jq openjdk-8-jre-headless
 			else
 				echo "Error: This version of Ubuntu is not supported. Supported versions are: Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo), Ubuntu 20.04 LTS (Focal Fossa)"
 				echo "Exiting"
@@ -1494,7 +1830,7 @@ script_install_packages() {
 				sudo apt update
 				
 				#Install packages and enable services
-				sudo apt install --yes rsync unzip p7zip wget curl tmux zip postfix jq
+				sudo apt install --yes rsync unzip p7zip wget curl tmux zip postfix jq openjdk-8-jre-headless
 			else
 				echo "Error: This version of Debian is not supported. Supported versions are: Debian 10 (Buster)"
 				echo "Exiting"
@@ -1506,13 +1842,10 @@ script_install_packages() {
 			exit 1
 		fi
 		
-		if [[ "$DISTRO" == "arch" ]]; then
-			echo "Arch Linux users have to install SteamCMD with an AUR tool."
-		fi
 		echo "Package installation complete."
 	else
 		echo "os-release file not found. Is this distro supported?"
-		echo "This script currently supports Arch Linux, Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo), Ubuntu 20.04 LTS (Focal Fossa)"
+		echo "This script currently supports Arch Linux, Ubuntu 18.04 LTS (Bionic Beaver), Ubuntu 19.10 (Disco Dingo), Ubuntu 20.04 LTS (Focal Fossa), Debian 10 (Buster)"
 		exit 1
 	fi
 }
@@ -1525,6 +1858,9 @@ script_install() {
 	echo "java"
 	echo "rsync"
 	echo "tmux (minimum version: 2.9a)"
+	echo "curl"
+	echo "jq"
+	echo "wget"
 	echo "postfix (optional/for the email feature)"
 	echo "zip (optional but required if using the email feature)"
 	echo ""
@@ -1536,8 +1872,12 @@ script_install() {
 	echo "List of files that are going to be generated on the system:"
 	echo ""
 	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-mkdir-tmpfs.service - Service to generate the folder structure once the RamDisk is started (only executes if RamDisk enabled)."
-	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-tmpfs.service - Server service file for use with a RamDisk (only executes if RamDisk enabled)."
-	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME.service - Server service file for normal hdd/ssd use."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla-tmpfs.service - Server service file for use with a RamDisk (only executes if RamDisk enabled)."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-vanilla.service - Server service file for normal hdd/ssd use."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot-tmpfs.service - Server service file for use with a RamDisk (only executes if RamDisk enabled)."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-spigot.service - Server service file for normal hdd/ssd use."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge-tmpfs.service - Server service file for use with a RamDisk (only executes if RamDisk enabled)."
+	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-forge.service - Server service file for normal hdd/ssd use."
 	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-timer-1.timer - Timer for scheduled command execution of $SERVICE_NAME-timer-1.service"
 	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-timer-1.service - Executes scheduled script functions: save, sync, backup and update."
 	echo "/home/$USER/.config/systemd/user/$SERVICE_NAME-timer-2.timer - Timer for scheduled command execution of $SERVICE_NAME-timer-2.service"
@@ -1574,6 +1914,29 @@ script_install() {
 		fi
 	else
 		TMPFS_ENABLE="0"
+	fi
+	
+	echo ""
+	echo "Select your Minecraft server type:"
+	echo "1 - Vanilla"
+	echo "2 - Spigot"
+	echo "3 - Forge"
+	read -p "Enter type (ex. 1): " GAME_TYPE
+	
+	if [[ "$GAME_TYPE" == "1" ]]; then
+		echo ""
+		read -p "Enable automatic updates for the vanilla minecraft server (y/n): " UPDATE_CONFIG
+		SCRIPT_UPDATE_CONFIG=${UPDATE_CONFIG:=n}
+		if [[ "$UPDATE_CONFIG" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+			UPDATE_ENABLED="1"
+		else
+			UPDATE_ENABLED="0"
+		fi
+	elif [[ "$GAME_TYPE" == "2" ]]; then
+		read -p "Choose spigot revision: (ex. 1.16.1): " REVISION_SPIGOT
+		UPDATE_ENABLED="0"
+	else
+		UPDATE_ENABLED="0"
 	fi
 	
 	echo ""
@@ -1762,9 +2125,21 @@ script_install() {
 	
 	if [[ "$TMPFS" =~ ^([yY][eE][sS]|[yY])$ ]]; then
 		su - $USER -c "systemctl --user enable $SERVICE_NAME-mkdir-tmpfs.service"
-		su - $USER -c "systemctl --user enable $SERVICE_NAME-tmpfs.service"
+		if [[ "$GAME_TYPE" == "1" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-vanilla-tmpfs.service"
+		elif [[ "$GAME_TYPE" == "2" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-spigot-tmpfs.service"
+		elif [[ "$GAME_TYPE" == "3" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-forge-tmpfs.service"
+		fi
 	elif [[ "$TMPFS" =~ ^([nN][oO]|[nN])$ ]]; then
-		su - $USER -c "systemctl --user enable $SERVICE_NAME.service"
+		if [[ "$GAME_TYPE" == "1" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-vanilla.service"
+		elif [[ "$GAME_TYPE" == "2" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-spigot.service"
+		elif [[ "$GAME_TYPE" == "3" ]]; then
+			su - $USER -c "systemctl --user enable $SERVICE_NAME-forge.service"
+		fi
 	fi
 	
 	echo "Creating folder structure for server..."
@@ -1772,20 +2147,18 @@ script_install() {
 	cp "$(readlink -f $0)" $SCRIPT_DIR
 	chmod +x $SCRIPT_DIR/$SCRIPT_NAME
 	
-	echo "Installing tmux configuration for server console and logs"
-	script_install_tmux_config
-	
 	if [[ "$SERVERSYNC_INSTALL" == "1" ]]; then
 		echo "Downloading and installing ServerSync from github."
 		mkdir -p /home/$USER/serversync
-		curl -s https://api.github.com/repos/official-antistasi-community/A3-Antistasi/releases/latest | jq -r ".assets[] | select(.name | contains(\"jar\")) | .browser_download_url" | wget -i -
-		cp $PWD/serversync*.jar /home/$USER/serversync/
+		curl -s https://api.github.com/repos/superzanti/ServerSync/releases/latest | jq -r ".assets[] | select(.name | contains(\"jar\")) | .browser_download_url" | wget -i -
+		mv *serversync* /home/$USER/serversync
 		sudo chown -R $USER:users /home/$USER/serversync
 		su - $USER -c "systemctl --user enable $SERVICE_NAME-serversync.service"
 	fi
 	
 	touch $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'tmpfs_enable='"$TMPFS_ENABLE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'type='"$GAME_TYPE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_sender='"$POSTFIX_SENDER" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_recipient='"$POSTFIX_RECIPIENT" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'email_update='"$POSTFIX_UPDATE" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
@@ -1798,6 +2171,7 @@ script_install() {
 	echo 'discord_start='"$DISCORD_START" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_stop='"$DISCORD_STOP" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'discord_crash='"$DISCORD_CRASH" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
+	echo 'updates='"$UPDATE_ENABLED" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'script_updates='"$SCRIPT_UPDATE_ENABLED" >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'bckp_delold=14' >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	echo 'log_delold=7' >> $SCRIPT_DIR/$SERVICE_NAME-config.conf
@@ -1809,11 +2183,20 @@ script_install() {
 	
 	echo "Installing game..."
 	
-	LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
-	JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
-	JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
-	JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
-	wget -O $SRV_DIR/server.json $(curl -s "$JAR_URL" | jq '.downloads.server .url')
+	if [[ "$GAME_TYPE" == "1" ]]; then
+		LATEST_VERSION=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq -r '.latest.release')
+		JSON_URL=$(curl -s "https://launchermeta.mojang.com/mc/game/version_manifest.json" | jq ".versions[] | select(.id==\"$LATEST_VERSION\") .url" | sed 's/"//g')
+		JAR_SHA1=$(curl -s "$JSON_URL" | jq '.downloads.server .sha1' | sed 's/"//g')
+		JAR_URL=$(curl -s "$JSON_URL" | jq '.downloads.server .url' | sed 's/"//g')
+		wget -O /home/$USER/server.json "$JAR_URL"
+	elif [[ "$GAME_TYPE" == "2" ]]; then
+		su - $USER -c "cd /home/$USER/server && wget -O BuildTools.jar https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
+		su - $USER -c "git config --global --unset core.autocrlf"
+		su - $USER -c "cd /home/$USER/server && java -jar BuildTools.jar --rev $REVISION_SPIGOT"
+	fi
+	
+	touch $SRV_DIR/eula.txt
+	echo "eula=true" > $SRV_DIR/eula.txt
 	
 	sudo chown -R "$USER":users "/home/$USER"
 	
@@ -1826,7 +2209,7 @@ script_install() {
 }
 
 #Do not allow for another instance of this script to run to prevent data loss
-if [[ "-send_notification_start_initialized" != "$1" ]] && [[ "-send_notification_start_complete" != "$1" ]] && [[ "-send_notification_stop_initialized" != "$1" ]] && [[ "-send_notification_stop_complete" != "$1" ]] && [[ "-send_notification_crash" != "$1" ]] && [[ "-attach" != "$1" ]] && [[ "-status" != "$1" ]]; then
+if [[ "-send_notification_start_initialized" != "$1" ]] && [[ "-send_notification_start_complete" != "$1" ]] && [[ "-send_notification_stop_initialized" != "$1" ]] && [[ "-send_notification_stop_complete" != "$1" ]] && [[ "-send_notification_crash" != "$1" ]] && [[ "-server_tmux_install" != "$1" ]] && [[ "-attach" != "$1" ]] && [[ "-status" != "$1" ]]; then
 	SCRIPT_PID_CHECK=$(basename -- "$0")
 	if pidof -x "$SCRIPT_PID_CHECK" -o $$ > /dev/null; then
 		echo "An another instance of this script is already running, please clear all the sessions of this script before starting a new session"
@@ -1835,6 +2218,7 @@ if [[ "-send_notification_start_initialized" != "$1" ]] && [[ "-send_notificatio
 fi
 
 if [ "$EUID" -ne "0" ] && [ -f "$SCRIPT_DIR/$SERVICE_NAME-config.conf" ]; then #Check if script executed as root, if not generate missing config fields
+	touch $SCRIPT_DIR/$SERVICE_NAME-config.conf
 	CONFIG_FIELDS="tmpfs_enable,email_sender,email_recipient,email_update_script,email_start,email_stop,email_crash,discord_update_script,discord_start,discord_stop,discord_crash,script_updates,bckp_delold,log_delold,serversync,update_ignore_failed_startups"
 	IFS=","
 	for CONFIG_FIELD in $CONFIG_FIELDS; do
@@ -1872,12 +2256,12 @@ case "$1" in
 		echo -e "${GREEN}-autobackup ${RED}- ${GREEN}Automaticly backup files when server running${NC}"
 		echo -e "${GREEN}-deloldbackup ${RED}- ${GREEN}Delete old backups${NC}"
 		echo -e "${GREEN}-install_aliases ${RED}- ${GREEN}Installs .bashrc aliases for easy access to the server tmux session${NC}"
-		echo -e "${GREEN}-rebuild_tmux_config ${RED}- ${GREEN}Reinstalls the tmux configuration file from the script. Usefull if any tmux configuration updates occoured${NC}"
 		echo -e "${GREEN}-rebuild_services ${RED}- ${GREEN}Reinstalls the systemd services from the script. Usefull if any service updates occoured${NC}"
 		echo -e "${GREEN}-disable_services ${RED}- ${GREEN}Disables all services. The server and the script will not start up on boot anymore${NC}"
 		echo -e "${GREEN}-enable_services ${RED}- ${GREEN}Enables all services dependant on the configuration file of the script${NC}"
 		echo -e "${GREEN}-reload_services ${RED}- ${GREEN}Reloads all services, dependant on the configuration file${NC}"
-		echo -e "${GREEN}-update ${RED}- ${GREEN}Update the server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
+		echo -e "${GREEN}-update ${RED}- ${GREEN}Update the spigot server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
+		echo -e "${GREEN}-update_spigot ${RED}- ${GREEN}Update the server, if the server is running it wil save it, shut it down, update it and restart it.${NC}"
 		echo -e "${GREEN}-update_script ${RED}- ${GREEN}Check github for script updates and update if newer version available${NC}"
 		echo -e "${GREEN}-update_script_force ${RED}- ${GREEN}Get latest script from github and install it no matter what the version${NC}"
 		echo -e "${GREEN}-status ${RED}- ${GREEN}Display status of server${NC}"
@@ -1936,6 +2320,9 @@ case "$1" in
 	-update)
 		script_update
 		;;
+	-update_spigot)
+		script_spigot_update
+		;;
 	-update_script)
 		script_update_github
 		;;
@@ -1966,8 +2353,11 @@ case "$1" in
 	-install_aliases)
 		script_install_alias
 		;;
-	-rebuild_tmux_config)
-		script_install_tmux_config
+	-server_tmux_install)
+		script_server_tmux_install
+		;;
+	-install_packages)
+		script_install_packages
 		;;
 	-install)
 		script_install
@@ -1991,7 +2381,7 @@ case "$1" in
 		script_timer_two
 		;;
 	*)
-	echo "Usage: $0 {diag|start|start_no_err|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_tmux_config|rebuild_services|disable_services|enable_services|reload_services|update|update_script|update_script_force|attach|status|install}"
+	echo "Usage: $0 {diag|start|start_no_err|stop|restart|saveon|saveoff|save|cleardrops|sync|backup|autobackup|deloldbackup|install_aliases|rebuild_services|disable_services|enable_services|reload_services|update|update_spigot|update_script|update_script_force|attach|status|install}"
 	exit 1
 	;;
 esac
