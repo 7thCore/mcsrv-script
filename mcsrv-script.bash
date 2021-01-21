@@ -763,7 +763,7 @@ script_update() {
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Updating..." | tee -a "$LOG_SCRIPT"
 				
 				rm $SRV_DIR/server.jar
-				wget -O $SRV_DIR/server.json "$JAR_URL"
+				wget -O $SRV_DIR/server.jar "$JAR_URL"
 				
 				echo "$(date +"%Y-%m-%d %H:%M:%S") [$VERSION] [$NAME] [INFO] (Update) Update completed." | tee -a "$LOG_SCRIPT"
 				echo "$LATEST_VERSION" > $UPDATE_DIR/installed.version
