@@ -1,0 +1,19 @@
+post_install() {
+	getent group mcsrv >/dev/null || groupadd --system mcsrv
+	getent passwd mcsrv >/dev/null || useradd --system -g mcsrv -G systemd-journal -G systemd-journal -d /srv/mcsrv/ -s /bin/bash mcsrv
+
+	chown -R mcsrv:mcsrv srv/mcsrv
+	loginctl enable-linger mcsrv
+	systemctl start user@$(id -u mcsrv).service
+}
+
+post_upgrade() {
+	chown -R mcsrv:mcsrv srv/mcsrv/.config/systemd/user
+	chown mcsrv:mcsrv srv/mcsrv/*
+}
+
+post_remove() {
+	loginctl disable-linger mcsrv
+	systemctl stop user@$(id -u mcsrv).service
+	userdel --remove mcsrv
+}
