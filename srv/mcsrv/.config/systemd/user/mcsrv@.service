@@ -1,0 +1,50 @@
+#    Copyright (C) 2022 7thCore
+#    This file is part of McSrv-Script.
+#
+#    McSrv-Script is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    McSrv-Script is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+[Unit]
+Description=Minecraft Server Service
+After=network.target
+Conflicts=mcsrv-tmpfs@%i.service
+StartLimitBurst=3
+StartLimitIntervalSec=300
+StartLimitAction=none
+OnFailure=mcsrv-send-notification@.service
+
+[Service]
+EnvironmentFile=/srv/mcsrv/environments/%i.env
+Type=forking
+KillMode=none
+WorkingDirectory=/srv/mcsrv/server/%i
+ExecStartPre=/usr/bin/mcsrv-script pre-start %i
+ExecStartPre=/usr/bin/mcsrv-script server_tmux_install %i
+ExecStart=/usr/bin/tmux -f /tmp/%u-%i-tmux.conf -L %u-%i-tmux.sock new-session -d -s McSrv '${JAVA} -server ${JAVA_ARGS} -jar $(ls -v /srv/mcsrv/server/%i | grep -i "${JAR_TYPE}" | grep -i ".jar" | head -n 1) nogui'
+ExecStartPost=/usr/bin/mcsrv-script post-start %i
+ExecStop=/usr/bin/mcsrv-script pre-stop %i
+ExecStop=/usr/bin/tmux -L %u-%i-tmux.sock send-keys -t McSrv.0 'say SERVER SHUTTING DOWN IN 10!' ENTER
+ExecStop=/usr/bin/sleep 5
+ExecStop=/usr/bin/tmux -L %u-%i-tmux.sock send-keys -t McSrv.0 'SERVER SHUTTING DOWN IN 5!' ENTER
+ExecStop=/usr/bin/sleep 5
+ExecStop=/usr/bin/tmux -L %u-%i-tmux.sock send-keys -t McSrv.0 'say SERVER SHUTTING DOWN NOW!' ENTER
+ExecStop=/usr/bin/tmux -L %u-%i-tmux.sock send-keys -t McSrv.0 'save-all' ENTER
+ExecStop=/usr/bin/tmux -L %u-%i-tmux.sock send-keys -t McSrv.0 'stop' ENTER
+ExecStopPost=/usr/bin/mcsrv-script post-stop %i
+TimeoutStartSec=infinity
+TimeoutStopSec=120
+RestartSec=10
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

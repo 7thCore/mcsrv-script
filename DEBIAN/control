@@ -1,0 +1,8 @@
+Package: mcsrv-script
+Version: 1.5-4
+Architecture: amd64
+Essential: no
+Priority: optional
+Depends: bash, coreutils, sudo, libpam-systemd, grep, sed, gawk, curl, rsync, wget, findutils, tmux, jq, zip, unzip, p7zip, postfix, s-nail, openjdk-17-jre-headless
+Maintainer: 7thCore
+Description: Minecraft server script for running the server on linux.

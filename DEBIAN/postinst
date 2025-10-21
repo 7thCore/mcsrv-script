@@ -1,0 +1,13 @@
+getent group mcsrv >/dev/null || groupadd --system mcsrv
+getent passwd mcsrv >/dev/null || useradd --system -g mcsrv -G systemd-journal -d /srv/mcsrv/ -s /bin/bash mcsrv
+
+install -dm700 srv/mcsrv/backups
+install -dm700 srv/mcsrv/config
+install -dm700 srv/mcsrv/environments
+install -dm700 srv/mcsrv/logs
+install -dm700 srv/mcsrv/server
+install -dm700 srv/mcsrv/tmpfs
+install -dm700 srv/mcsrv/updates
+chown -R mcsrv:mcsrv srv/mcsrv
+loginctl enable-linger mcsrv
+systemctl start user@$(id -u mcsrv).service

@@ -1,0 +1,2 @@
+loginctl disable-linger mcsrv
+systemctl stop user@$(id -u mcsrv).service
