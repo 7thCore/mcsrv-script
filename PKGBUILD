@@ -52,7 +52,7 @@ source=('bash_profile'
         'mcsrv-tmpfs@.service')
 sha256sums=('f1e2f643b81b27d16fe79e0563e39c597ce42621ae7c2433fd5b70f1eeab5d63'
             '2c9e93440eb49130e9d267abae0dc5e2cb57236dc44af84ec338cb09a0852902'
-            '72561450730e56aae580f9904777e44ddd4ca696cec0df1908f5e6ab56c1b46a'
+            '7a25dd59f11317f173bd527c059ad61fbdce19a00c0ac12aa6ceee5c357610bf'
             '5da081f8fd954393296cd4f7123f2d51f65b496ad844d642b382d74df53160b3'
             '45c2e17ffab48ef1e84a6a462932d114872d646a5964c3e6942fc8e8313d1093'
             'ef2e510ad13ca8688320cbff3563ea01b49c3d2873712586e38c7726fd095b2a'
@@ -65,7 +65,7 @@ sha256sums=('f1e2f643b81b27d16fe79e0563e39c597ce42621ae7c2433fd5b70f1eeab5d63'
 package() {
   install -d -m0755 "${pkgdir}/usr/bin"
   install -d -m0755 "${pkgdir}/srv/mcsrv"
-  install -d -m0755 "${pkgdir}/srv/mcsrv/server"
+  install -d -m0755 "${pkgdir}/srv/mcsrv/servers"
   install -d -m0755 "${pkgdir}/srv/mcsrv/config"
   install -d -m0755 "${pkgdir}/srv/mcsrv/environments"
   install -d -m0755 "${pkgdir}/srv/mcsrv/updates"
