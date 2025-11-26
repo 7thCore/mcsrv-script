@@ -24,12 +24,25 @@ StartLimitAction=none
 [Service]
 Type=oneshot
 RemainAfterExit=true
+
+# McSrv user specific settings
+User=mcsrv
+Group=mcsrv
+LogsDirectory=mcsrv
+StateDirectory=mcsrv
+SyslogIdentifier=mcsrv
 WorkingDirectory=/srv/mcsrv
+Environment=HOME=/srv/mcsrv
+
+# Executable settings
 ExecStart=/bin/mkdir -p /srv/mcsrv/tmpfs/%i
-TimeoutStartSec=infinity
-TimeoutStopSec=120
+
+# Service settings
+RestartForceExitStatus=100
+TimeoutSec=15min
 RestartSec=10
 Restart=on-failure
+RestartMode=direct
 
 [Install]
 WantedBy=default.target

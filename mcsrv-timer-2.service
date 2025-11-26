@@ -19,4 +19,15 @@ Description=McSrv Script Timer 2 Service
 
 [Service]
 Type=oneshot
+
+# McSrv user specific settings
+User=mcsrv
+Group=mcsrv
+LogsDirectory=mcsrv
+StateDirectory=mcsrv
+SyslogIdentifier=mcsrv
+WorkingDirectory=/srv/mcsrv/servers/%i
+Environment=HOME=/srv/mcsrv
+
+# Executable settings
 ExecStart=/usr/bin/mcsrv-script timer_two
