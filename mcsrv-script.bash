@@ -21,7 +21,7 @@
 
 #Static script variables
 export NAME="McSrv" #Name of the tmux session.
-export VERSION="1.5-5" #Package and script version.
+export VERSION="1.5-6" #Package and script version.
 export SERVICE_NAME="mcsrv" #Name of the service files, user, script and script log.
 export LOG_DIR="/srv/$SERVICE_NAME/logs" #Location of the script's log files.
 export LOG_STRUCTURE="$LOG_DIR/$(date +"%Y")/$(date +"%m")/$(date +"%d")" #Folder structure of the script's log files.
@@ -633,11 +633,13 @@ script_start() {
 			elif [[ "$(systemctl --user show -p ActiveState --value $SERVER_SERVICE)" == "failed" ]] && [[ "$(systemctl --user show -p UnitFileState --value $SERVER_SERVICE)" == "enabled" ]]; then
 				echo "[$NAME $VERSION] (Start) Server $SERVER_INSTANCE is in failed state. See systemctl --user status $SERVER_SERVICE for details."
 				if [[ "$1" == "ignore" ]]; then
+					systemctl --user reset-failed $SERVER_SERVICE
 					systemctl --user start $SERVER_SERVICE
 					script_start_loop $SERVER_SERVICE
 				else
 					read -p "Do you still want to start the server? (y/n): " FORCE_START
 					if [[ "$FORCE_START" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+						systemctl --user reset-failed $SERVER_SERVICE
 						systemctl --user start $SERVER_SERVICE
 						script_start_loop $SERVER_SERVICE
 					fi
@@ -656,11 +658,13 @@ script_start() {
 			elif [[ "$(systemctl --user show -p ActiveState --value $SERVER_SERVICE)" == "failed" ]] && [[ "$(systemctl --user show -p UnitFileState --value $SERVER_SERVICE)" == "enabled" ]]; then
 				echo "[$NAME $VERSION] (Start) Server $1 is in failed state. See systemctl --user status $SERVER_SERVICE for details."
 				if [[ "$2" == "ignore" ]]; then
+					systemctl --user reset-failed $SERVER_SERVICE
 					systemctl --user start $SERVER_SERVICE
 					script_start_loop $SERVER_SERVICE
 				else
 					read -p "Do you still want to start the server? (y/n): " FORCE_START
 					if [[ "$FORCE_START" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+						systemctl --user reset-failed $SERVER_SERVICE
 						systemctl --user start $SERVER_SERVICE
 						script_start_loop $SERVER_SERVICE
 					fi
