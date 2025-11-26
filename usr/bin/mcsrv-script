@@ -21,7 +21,7 @@
 
 #Static script variables
 export NAME="McSrv" #Name of the tmux session.
-export VERSION="1.5-4" #Package and script version.
+export VERSION="1.5-5" #Package and script version.
 export SERVICE_NAME="mcsrv" #Name of the service files, user, script and script log.
 export LOG_DIR="/srv/$SERVICE_NAME/logs" #Location of the script's log files.
 export LOG_STRUCTURE="$LOG_DIR/$(date +"%Y")/$(date +"%m")/$(date +"%d")" #Folder structure of the script's log files.
@@ -787,11 +787,19 @@ script_send_notification_crash() {
 		Attachment contents:
 		service_logs.zip - Logs from the systemd service
 		game_logs.zip - Logs from the game
+
+		Remember, this is software unsupported by the game developers. Do not send them these logs.
 		EOF
 	fi
 
 	if [[ "$DISCORD_CRASH" == "1" ]]; then
 		script_discord_message "$DISCORD_COLOR_CRASH" "Server $1 crashed 3 times in the last 5 minutes.\nAutomatic restart is disabled and the server is inactive.\n\nPlease review your logs located in $LOG_STRUCTURE/Server-$1-crash_$CRASH_TIME."
+
+		while IFS="" read -r DISCORD_WEBHOOK || [ -n "$DISCORD_WEBHOOK" ]; do
+			curl -H "Content-Type: application/json" -X POST -d "{\"embeds\": [{ \"author\": { \"name\": \"$NAME Script\", \"url\": \"https://github.com/7thCore/$SERVICE_NAME-script\" }, \"color\": \"$1\", \"description\": \"$2\", \"footer\": {\"text\": \"Version $VERSION\"}, \"timestamp\": \"$(date -u --iso-8601=seconds)\"}] }" "$DISCORD_WEBHOOK"
+			curl -H "Expect: application/json" -F "file=@$LOG_STRUCTURE/Server-$1-crash_$CRASH_TIME/service_logs.zip" -F "payload_json={\"content\": \"Service logs for $1. Remember, this is software unsupported by the game developers. Do not send them these logs.\"}" "$DISCORD_WEBHOOK"
+			curl -H "Expect: application/json" -F "file=@$LOG_STRUCTURE/Server-$1-crash_$CRASH_TIME/game_logs.zip" -F "payload_json={\"content\": \"Game logs for $1. Remember, this is software unsupported by the game developers. Do not send them these logs.:\"}" "$DISCORD_WEBHOOK"
+		done < $CONFIG_DIR/discord_webhooks.txt
 	fi
 	echo "[$NAME $VERSION] (Crash) Server $1 crashed. Please review your logs located in $LOG_STRUCTURE/Server-$1-crash_$CRASH_TIME."
 }

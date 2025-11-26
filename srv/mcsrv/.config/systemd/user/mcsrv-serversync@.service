@@ -19,13 +19,28 @@ Description=Minecraft Server Sync Service
 After=network.target
 
 [Service]
-Type=forking
+Type=oneshot
+
+# McSrv user specific settings
+User=mcsrv
+Group=mcsrv
+LogsDirectory=mcsrv
+StateDirectory=mcsrv
+SyslogIdentifier=mcsrv
 WorkingDirectory=/srv/mcsrv/%i
+Environment=HOME=/srv/mcsrv
+
+# Executable settings
 ExecStart=/usr/bin/tmux -f /tmp/%u-%i-tmux.conf -L %u-%i-serversync-tmux.sock new-session -d -s ServerSync 'java -jar $(ls -v /srv/mcsrv/%i | grep -i "serversync" | head -n 1) server'
 ExecStop=/usr/bin/tmux -L %u-%i-serversync-tmux.sock kill-session -t ServerSync
 
+# Service settings
+KillMode=process
+KillSignal=SIGINT
+TimeoutSec=15min
+RestartSec=10
 Restart=on-failure
-RestartSec=60
+RestartMode=direct
 
 [Install]
 WantedBy=default.target
