@@ -16,7 +16,7 @@
 
 pkgname=mcsrv-script
 pkgver=1.5
-pkgrel=4
+pkgrel=5
 pkgdesc='Minecraft server script for running the server on linux.'
 arch=('x86_64')
 license=('GPL3')
