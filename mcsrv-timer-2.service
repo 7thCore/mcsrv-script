@@ -26,7 +26,7 @@ Group=mcsrv
 LogsDirectory=mcsrv
 StateDirectory=mcsrv
 SyslogIdentifier=mcsrv
-WorkingDirectory=/srv/mcsrv/servers/%i
+WorkingDirectory=/srv/mcsrv
 Environment=HOME=/srv/mcsrv
 
 # Executable settings

@@ -33,7 +33,7 @@ Group=mcsrv
 LogsDirectory=mcsrv
 StateDirectory=mcsrv
 SyslogIdentifier=mcsrv
-WorkingDirectory=/srv/mcsrv/servers/%i
+WorkingDirectory=/srv/mcsrv/tmpfs/%i
 Environment=HOME=/srv/mcsrv
 EnvironmentFile=/srv/mcsrv/environments/%i.env
 
